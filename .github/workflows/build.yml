@@ -1,0 +1,120 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.24', '1.23']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Check Go formatting
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Go files not formatted:"
+          gofmt -s -d .
+          exit 1
+        fi
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run go mod tidy
+      run: go mod tidy && git diff --exit-code
+
+  build:
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            output: zabbix-bench
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            output: zabbix-bench
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            output: zabbix-bench
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            output: zabbix-bench
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            output: zabbix-bench.exe
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Build
+      run: |
+        mkdir -p dist
+        go build -o dist/${{ matrix.output }} main.go
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: zabbix-bench-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: dist/${{ matrix.output }}
+        retention-days: 7
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: dist
+
+    - name: Flatten artifact structure
+      run: |
+        mkdir -p release
+        find dist -type f -name "zabbix-bench*" -exec mv {} release/ \;
+        ls -la release/
+
+    - name: Create checksums
+      run: |
+        cd release
+        sha256sum * > SHA256SUMS
+        cat SHA256SUMS
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

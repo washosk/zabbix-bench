@@ -1,0 +1,53 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'README.md'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'README.md'
+
+jobs:
+  markdown-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Markdown Lint
+      uses: nosborn/github-action-markdown-cli@v3.3.0
+      with:
+        files: .
+        config_file: .markdownlint.json
+      continue-on-error: true
+
+  readme-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check README exists and has content
+      run: |
+        if [ ! -f README.md ]; then
+          echo "README.md not found"
+          exit 1
+        fi
+        if [ $(wc -l < README.md) -lt 100 ]; then
+          echo "README.md is too short"
+          exit 1
+        fi
+        echo "✓ README.md is valid"
+
+    - name: Check for required sections
+      run: |
+        echo "Checking for required README sections..."
+        grep -q "^## Features" README.md && echo "✓ Features section found"
+        grep -q "^## Usage" README.md && echo "✓ Usage section found"
+        grep -q "^## Requirements" README.md && echo "✓ Requirements section found"
+        grep -q "^## Installation" README.md && echo "✓ Installation section found"
+        grep -q "^## License" README.md && echo "✓ License section found"
