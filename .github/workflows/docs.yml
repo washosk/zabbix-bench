@@ -31,6 +31,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up Go
+      uses: actions/setup-go@v5
+
     - name: Check README exists and has content
       run: |
         if [ ! -f README.md ]; then
