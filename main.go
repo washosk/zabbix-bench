@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"sort"
@@ -21,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "dev"
+var Version = "1.3.2"
 
 type Config struct {
 	NumHosts       int    `yaml:"hosts"`
@@ -38,6 +42,8 @@ type Config struct {
 	SkipSetup      bool   `yaml:"skip_setup"`
 	KeepHosts      bool   `yaml:"keep_hosts"`
 	BatchHosts     int    `yaml:"batch_hosts"`
+	MaxBatchSize   int    `yaml:"max_batch_size"` // Maximum total metrics per batch
+	PoolSize       int    `yaml:"pool_size"`      // TCP connection pool size
 	MetricsPerHost int    `yaml:"metrics_per_host"` // Number of metrics to send per host
 	OutputJSON     string // output file for JSON results
 }
@@ -110,6 +116,8 @@ type Benchmarker struct {
 	done      chan struct{}
 	stopOnce  sync.Once
 	startTime time.Time
+
+	pooledSender *PooledSender
 
 	// Per-worker stats
 	workerStats map[int]*WorkerStats
@@ -230,6 +238,8 @@ func loadConfigFile(path string) (Config, error) {
 		TrapperAddr:    "",
 		GroupName:      "Benchmark-Group",
 		BatchHosts:     50,
+		MaxBatchSize:   5000,
+		PoolSize:       0,
 		MetricsPerHost: 6,
 	}
 
@@ -258,6 +268,8 @@ func main() {
 		TrapperAddr:    "",
 		GroupName:      "Benchmark-Group",
 		BatchHosts:     50,
+		MaxBatchSize:   5000,
+		PoolSize:       0,
 		MetricsPerHost: 6,
 	}
 
@@ -285,6 +297,8 @@ func main() {
 	flag.BoolVar(&cfg.SkipSetup, "skip-setup", cfg.SkipSetup, "Skip host/item creation (use existing hosts with same prefix)")
 	flag.BoolVar(&cfg.KeepHosts, "keep-hosts", cfg.KeepHosts, "Keep hosts after test (skip cleanup)")
 	flag.IntVar(&cfg.BatchHosts, "batch-hosts", cfg.BatchHosts, "Number of hosts to pack into a single bulk Trapper packet")
+	flag.IntVar(&cfg.MaxBatchSize, "batch-metrics", cfg.MaxBatchSize, "Maximum number of metrics per batch packet")
+	flag.IntVar(&cfg.PoolSize, "pool-size", cfg.PoolSize, "TCP Connection Pool size (0 = disabled)")
 	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", cfg.MetricsPerHost, "Number of metrics to send per host")
 	flag.Parse()
 
@@ -342,6 +356,12 @@ func main() {
 		if !explicitFlags["batch-hosts"] {
 			cfg.BatchHosts = fileCfg.BatchHosts
 		}
+		if !explicitFlags["batch-metrics"] {
+			cfg.MaxBatchSize = fileCfg.MaxBatchSize
+		}
+		if !explicitFlags["pool-size"] {
+			cfg.PoolSize = fileCfg.PoolSize
+		}
 		if !explicitFlags["metrics-per-host"] {
 			cfg.MetricsPerHost = fileCfg.MetricsPerHost
 		}
@@ -388,11 +408,12 @@ func main() {
 	}
 
 	bm := &Benchmarker{
-		cfg:         cfg,
-		pool:        newValuePool(1024),
-		done:        make(chan struct{}),
-		workerStats: make(map[int]*WorkerStats),
-		latencies:   make([]int64, 0, 100000),
+		cfg:          cfg,
+		pool:         newValuePool(1024),
+		done:         make(chan struct{}),
+		workerStats:  make(map[int]*WorkerStats),
+		latencies:    make([]int64, 0, 100000),
+		pooledSender: NewPooledSender(cfg.TrapperAddr, cfg.PoolSize),
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -442,6 +463,116 @@ func main() {
 
 	if !cfg.KeepHosts {
 		bm.Cleanup()
+	}
+}
+
+type PooledSender struct {
+	addr    string
+	pool    chan net.Conn
+	timeout time.Duration
+}
+
+func NewPooledSender(addr string, poolSize int) *PooledSender {
+	var pool chan net.Conn
+	if poolSize > 0 {
+		pool = make(chan net.Conn, poolSize)
+	}
+	return &PooledSender{
+		addr:    addr,
+		pool:    pool,
+		timeout: 15 * time.Second,
+	}
+}
+
+func (s *PooledSender) getConn() (net.Conn, bool, error) {
+	if s.pool != nil {
+		select {
+		case conn := <-s.pool:
+			return conn, true, nil
+		default:
+		}
+	}
+	conn, err := net.DialTimeout("tcp", s.addr, s.timeout)
+	return conn, false, err
+}
+
+func (s *PooledSender) putConn(conn net.Conn) {
+	if s.pool != nil {
+		select {
+		case s.pool <- conn:
+			return
+		default:
+		}
+	}
+	conn.Close()
+}
+
+func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
+	packet := zabbix.NewPacket(metrics, false)
+	dataPacket, _ := json.Marshal(packet)
+
+	buffer := append([]byte("ZBXD\x01"), packet.DataLen()...)
+	buffer = append(buffer, dataPacket...)
+
+	conn, isPooled, err := s.getConn()
+	if err != nil {
+		return err
+	}
+
+	for {
+		conn.SetDeadline(time.Now().Add(s.timeout))
+
+		_, err = conn.Write(buffer)
+		if err != nil {
+			conn.Close()
+			if isPooled {
+				// Retry once with a new connection if the pooled one was stale
+				conn, isPooled, err = s.getConn()
+				if err != nil {
+					return err
+				}
+				isPooled = false // It's definitely new now (or we're loop-breaking)
+				continue
+			}
+			return fmt.Errorf("write error: %v", err)
+		}
+
+		header := make([]byte, 13)
+		_, err = io.ReadFull(conn, header)
+		if err != nil {
+			conn.Close()
+			if isPooled {
+				// Retry once
+				conn, isPooled, err = s.getConn()
+				if err != nil {
+					return err
+				}
+				isPooled = false
+				continue
+			}
+			return fmt.Errorf("read header error: %v", err)
+		}
+
+		if !bytes.Equal(header[:5], []byte("ZBXD\x01")) {
+			conn.Close()
+			return fmt.Errorf("invalid header")
+		}
+
+		dataLen := binary.LittleEndian.Uint64(header[5:13])
+		if dataLen > 100*1024*1024 {
+			conn.Close()
+			return fmt.Errorf("response too large")
+		}
+
+		data := make([]byte, dataLen)
+		_, err = io.ReadFull(conn, data)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("read data error: %v", err)
+		}
+
+		s.putConn(conn)
+		return nil
 	}
 }
 
@@ -585,7 +716,6 @@ func (bm *Benchmarker) Run() {
 }
 
 func (bm *Benchmarker) worker(workerID int, hosts []string) {
-	sender := zabbix.NewSender(bm.cfg.TrapperAddr)
 	poolSize := len(bm.pool.bools)
 	idx := rand.Intn(poolSize)
 
@@ -637,7 +767,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 					err = fmt.Errorf("sender panic: %v", r)
 				}
 			}()
-			_, _, _, err = sender.SendMetrics(metrics)
+			err = bm.pooledSender.SendMetrics(metrics)
 		}()
 
 		latency := time.Since(t0).Milliseconds()
@@ -659,6 +789,13 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	}
 
 	batchSize := bm.cfg.BatchHosts
+	if bm.cfg.MaxBatchSize > 0 && bm.cfg.MetricsPerHost > 0 {
+		hostsFit := bm.cfg.MaxBatchSize / bm.cfg.MetricsPerHost
+		if hostsFit > 0 {
+			batchSize = hostsFit
+		}
+	}
+
 	if batchSize <= 0 || batchSize > len(hosts) {
 		batchSize = len(hosts)
 	}

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.2] - 2026-04-10
+
+### Added
+
+- **Connection Pooling**: Native TCP connection reuse via `-pool-size` flag to eliminate socket handshake overhead.
+- **Metric-based Batching**: Introduced `-batch-metrics` to decouple batching from host count, allowing high-density payloads.
+- **Stale Connection Recovery**: Implemented auto-retry logic in the pooled sender to handle asynchronous server-side TCP drops.
+
+---
+
 ## [1.3.1] - 2026-04-10
 
 ### Added
