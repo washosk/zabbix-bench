@@ -224,7 +224,7 @@ func loadConfigFile(path string) (Config, error) {
 		Rate:           0,
 		APIURL:         "http://localhost/zabbix/api_jsonrpc.php",
 		User:           "Admin",
-		Pass:           "zabbix",
+		Pass:           "",
 		TrapperAddr:    "",
 		GroupName:      "Benchmark-Group",
 		BatchHosts:     50,
@@ -252,7 +252,7 @@ func main() {
 		Rate:           0,
 		APIURL:         "http://localhost/zabbix/api_jsonrpc.php",
 		User:           "Admin",
-		Pass:           "zabbix",
+		Pass:           "",
 		TrapperAddr:    "",
 		GroupName:      "Benchmark-Group",
 		BatchHosts:     50,
@@ -270,7 +270,7 @@ func main() {
 	flag.IntVar(&cfg.Rate, "rate", cfg.Rate, "Batches per second per host (0=flood)")
 	flag.StringVar(&cfg.APIURL, "api-url", cfg.APIURL, "Zabbix API URL")
 	flag.StringVar(&cfg.User, "user", cfg.User, "Zabbix username")
-	flag.StringVar(&cfg.Pass, "pass", cfg.Pass, "Zabbix password (default: $ZABBIX_PASS or \"zabbix\")")
+	flag.StringVar(&cfg.Pass, "pass", "", "Zabbix password (default: $ZABBIX_PASS or \"zabbix\")")
 	flag.StringVar(&cfg.APIKey, "api-key", cfg.APIKey, "Zabbix API token (default: $ZABBIX_API_KEY; skips user.login)")
 	flag.StringVar(&cfg.TrapperAddr, "trapper-addr", cfg.TrapperAddr, "Zabbix Trapper address")
 	flag.StringVar(&cfg.GroupName, "group", cfg.GroupName, "Host group name")
@@ -388,8 +388,9 @@ func main() {
 
 	go func() {
 		<-sigChan
+		signal.Reset(os.Interrupt, syscall.SIGTERM)
 		fmt.Println()
-		log.Printf("Interrupt received. Stopping benchmark...")
+		log.Printf("Interrupt received. Stopping benchmark (Ctrl+C again to force quit)...")
 		bm.Stop()
 	}()
 
@@ -695,21 +696,12 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	mph := int64(bm.cfg.MetricsPerHost)
 	values := batches * mph
 
+	bm.sortLatencies()
 	var minLat, maxLat int64
 	if len(bm.latencies) > 0 {
 		minLat = bm.latencies[0]
-		maxLat = bm.latencies[0]
-		for _, lat := range bm.latencies {
-			if lat < minLat {
-				minLat = lat
-			}
-			if lat > maxLat {
-				maxLat = lat
-			}
-		}
+		maxLat = bm.latencies[len(bm.latencies)-1]
 	}
-
-	bm.sortLatencies()
 
 	avgLatency := int64(0)
 	if packets > 0 {

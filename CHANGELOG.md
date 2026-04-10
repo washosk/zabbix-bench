@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2026-04-10
+
+### Fixed
+
+- **Execution Safety**: Resolved index wrap-around `ValuePool` overflow leading to memory panics on 32-bit archs.
+- **Panic Protection**: Blocked instantaneous crash when `-senders 0` was configured.
+- **Timing Robustness**: Fixed rate-limiter panic when parsing inputs >1000 VPS.
+- **Runtime Recovery**: Handled uninterruptible signal blocks causing terminal lockups on failed cleanup.
+- **Auth Integrity**: Environment variables (`ZABBIX_PASS`) are now securely registered and processed over defaults.
+- **Setup Speed**: Vastly optimized the item creation block into grouped API matrices, dropping network payload time exponentially.
+- **Latency Compute**: Bypassed O(N) evaluation bounds during generation stats, scaling direct O(1) reads pre-sort.
+
+---
+
 ## [1.0.1] - 2026-04-10
 
 ### Fixed
