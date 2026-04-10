@@ -66,7 +66,7 @@ go build main.go && ./zabbix-bench --help
 
 Use clear, descriptive commit messages:
 
-```
+```bash
 Add JSON output export feature
 
 - Implement -output-json flag
@@ -169,6 +169,7 @@ Email security concerns privately to the maintainer rather than opening public i
 ### Bug reports
 
 Include:
+
 - Go version (`go version`)
 - Zabbix version
 - Command used
@@ -177,7 +178,7 @@ Include:
 
 Example:
 
-```
+```markdown
 **Zabbix version:** 7.0
 **Go version:** 1.24
 **OS:** Linux Debian 13
@@ -195,6 +196,7 @@ Should complete benchmark successfully
 ### Feature requests
 
 Describe:
+
 - Use case
 - Why it's needed
 - Potential implementation approach

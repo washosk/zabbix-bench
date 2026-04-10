@@ -11,9 +11,6 @@ on:
     paths:
       - 'README.md'
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   markdown-lint:
     runs-on: ubuntu-latest
@@ -32,10 +29,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v5.2.1
+      uses: actions/setup-go@v5
 
     - name: Check README exists and has content
       run: |

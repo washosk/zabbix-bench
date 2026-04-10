@@ -91,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## How to upgrade
 
 Each release provides pre-built binaries for:
+
 - Linux (x86_64, ARM64)
 - macOS (Intel, Apple Silicon)
 - Windows (x86_64)
@@ -98,6 +99,7 @@ Each release provides pre-built binaries for:
 Download from [Releases](https://github.com/washosk/zabbix-bench/releases)
 
 Or update via package manager:
+
 ```bash
 # Homebrew
 brew upgrade zabbix-bench

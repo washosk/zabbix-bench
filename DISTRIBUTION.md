@@ -132,10 +132,7 @@ yay -S zabbix-bench
 
 ### Publish to pkg.go.dev
 
-The tool is automatically indexed at:
-```
-https://pkg.go.dev/github.com/washosk/zabbix-bench
-```
+The tool is automatically indexed at <https://pkg.go.dev/github.com/washosk/zabbix-bench>
 
 Users can install with:
 
@@ -242,7 +239,7 @@ dpkg-deb --build zabbix-bench_1.0.0_amd64 zabbix-bench_1.0.0_amd64.deb
 
 ## Maintenance
 
-### For each new release:
+### For each new release
 
 1. Tag commit: `git tag vX.Y.Z && git push origin vX.Y.Z`
 2. Create GitHub release with all binaries
@@ -251,7 +248,7 @@ dpkg-deb --build zabbix-bench_1.0.0_amd64 zabbix-bench_1.0.0_amd64.deb
 5. Build and push Docker image
 6. Update installation docs in main README
 
-### Version strategy:
+### Version strategy
 
 - Use semantic versioning (major.minor.patch)
 - Tag releases with `v` prefix: `v1.0.0`
