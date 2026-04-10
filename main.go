@@ -371,6 +371,9 @@ func main() {
 	if cfg.Rate < 0 {
 		log.Fatalf("-rate must be >= 0 (0 = flood mode)")
 	}
+	if cfg.NumSenders <= 0 {
+		log.Fatalf("-senders must be > 0")
+	}
 
 	bm := &Benchmarker{
 		cfg:         cfg,
@@ -391,9 +394,17 @@ func main() {
 	}()
 
 	if cfg.SkipSetup {
-		bm.loadExistingHosts()
+		if err := bm.loadExistingHosts(); err != nil {
+			log.Printf("Setup failed: %v", err)
+			bm.Cleanup()
+			os.Exit(1)
+		}
 	} else {
-		bm.Setup()
+		if err := bm.Setup(); err != nil {
+			log.Printf("Setup failed: %v", err)
+			bm.Cleanup()
+			os.Exit(1)
+		}
 	}
 
 	if cfg.Duration > 0 {
@@ -421,13 +432,13 @@ func main() {
 	}
 }
 
-func (bm *Benchmarker) login() {
+func (bm *Benchmarker) login() error {
 	bm.api = zabbixapi.NewAPI(bm.cfg.APIURL)
 
 	if bm.cfg.APIKey != "" {
 		bm.api.Auth = bm.cfg.APIKey
 		log.Printf("Using API token for authentication.")
-		return
+		return nil
 	}
 
 	var token string
@@ -436,20 +447,27 @@ func (bm *Benchmarker) login() {
 		"password": bm.cfg.Pass,
 	}, &token)
 	if err != nil {
-		log.Fatalf("Error logging into Zabbix API: %v", err)
+		return fmt.Errorf("error logging into Zabbix API: %v", err)
 	}
 	bm.api.Auth = token
 	log.Printf("Logged into Zabbix API (user: %s).", bm.cfg.User)
 
 	// Query and display server health
 	bm.printServerHealth()
+	return nil
 }
 
-func (bm *Benchmarker) Setup() {
+func (bm *Benchmarker) Setup() error {
 	log.Printf("=== SETUP PHASE ===")
-	bm.login()
+	if err := bm.login(); err != nil {
+		return err
+	}
 
-	bm.groupID = bm.ensureHostGroup(bm.cfg.GroupName)
+	var err error
+	bm.groupID, err = bm.ensureHostGroup(bm.cfg.GroupName)
+	if err != nil {
+		return err
+	}
 	log.Printf("Host Group: %s (ID: %s)", bm.cfg.GroupName, bm.groupID)
 
 	log.Printf("Creating %d hosts in parallel (concurrency=5)...", bm.cfg.NumHosts)
@@ -474,16 +492,20 @@ func (bm *Benchmarker) Setup() {
 	}
 	wg.Wait()
 	log.Printf("Setup complete. %d/%d hosts ready.", len(bm.hostIDs), bm.cfg.NumHosts)
+	return nil
 }
 
-func (bm *Benchmarker) loadExistingHosts() {
+func (bm *Benchmarker) loadExistingHosts() error {
 	log.Printf("=== SKIP SETUP: Loading existing hosts with prefix '%s' ===", bm.cfg.HostPrefix)
-	bm.login()
+	if err := bm.login(); err != nil {
+		return err
+	}
 
 	for i := 0; i < bm.cfg.NumHosts; i++ {
 		bm.hostNames = append(bm.hostNames, fmt.Sprintf("%s%04d", bm.cfg.HostPrefix, i+1))
 	}
 	log.Printf("Loaded %d host names (no API verification).", len(bm.hostNames))
+	return nil
 }
 
 func (bm *Benchmarker) Run() {
@@ -562,7 +584,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
 
 		for _, host := range hostSlice {
-			i := idx % poolSize
+			i := int(uint(idx) % uint(poolSize))
 			idx++
 
 			// Generate configurable number of metrics per host
@@ -646,7 +668,11 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		return
 	}
 
-	ticker := time.NewTicker(time.Duration(1000/bm.cfg.Rate) * time.Millisecond)
+	dur := time.Second / time.Duration(bm.cfg.Rate)
+	if dur <= 0 {
+		dur = time.Microsecond
+	}
+	ticker := time.NewTicker(dur)
 	defer ticker.Stop()
 	for {
 		select {
@@ -848,19 +874,19 @@ func (bm *Benchmarker) Cleanup() {
 	log.Printf("Cleanup complete.")
 }
 
-func (bm *Benchmarker) ensureHostGroup(name string) string {
+func (bm *Benchmarker) ensureHostGroup(name string) (string, error) {
 	groups, err := bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
 	if err == nil && len(groups) > 0 {
-		return groups[0].GroupID
+		return groups[0].GroupID, nil
 	}
 	if err := bm.api.HostGroupsCreate(zabbixapi.HostGroups{{Name: name}}); err != nil {
-		log.Fatalf("Failed to create host group: %v", err)
+		return "", fmt.Errorf("failed to create host group: %v", err)
 	}
 	groups, err = bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
 	if err != nil || len(groups) == 0 {
-		log.Fatalf("Failed to retrieve host group after creation: %v", err)
+		return "", fmt.Errorf("failed to retrieve host group after creation: %v", err)
 	}
-	return groups[0].GroupID
+	return groups[0].GroupID, nil
 }
 
 func (bm *Benchmarker) createHostWithItems(hostName string) string {
@@ -894,19 +920,24 @@ func (bm *Benchmarker) createHostWithItems(hostName string) string {
 	metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
 
 	// Create items matching the metric names generated in sendBatch()
+	var items []map[string]any
 	for m := 0; m < bm.cfg.MetricsPerHost; m++ {
 		metricType := metricTypes[m%len(metricTypes)]
 		itemKey := fmt.Sprintf("test.metric.%d.%s", m, metricType)
 		itemName := fmt.Sprintf("Metric %d (%s)", m, metricType)
 
-		if err := bm.api.CallWithErrorParse("item.create", map[string]any{
+		items = append(items, map[string]any{
 			"name":       itemName,
 			"key_":       itemKey,
 			"hostid":     hostID,
 			"type":       2, // Trapper type
 			"value_type": metricTypeMap[metricType],
-		}, nil); err != nil {
-			log.Printf("Warning: item.create %s on %s: %v", itemKey, hostName, err)
+		})
+	}
+
+	if len(items) > 0 {
+		if err := bm.api.CallWithErrorParse("item.create", items, nil); err != nil {
+			log.Printf("Warning: item.create batch on %s: %v", hostName, err)
 		}
 	}
 	return hostID
