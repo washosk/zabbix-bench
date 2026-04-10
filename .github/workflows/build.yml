@@ -3,6 +3,7 @@ name: Build & Test
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -102,7 +103,15 @@ jobs:
     - name: Flatten artifact structure
       run: |
         mkdir -p release
-        find dist -type f -name "zabbix-bench*" -exec mv {} release/ \;
+        for dir in dist/zabbix-bench-*/; do
+          artifact_name=$(basename "$dir")
+          file=$(find "$dir" -type f | head -1)
+          if [[ "$file" == *.exe ]]; then
+            cp "$file" "release/${artifact_name}.exe"
+          else
+            cp "$file" "release/${artifact_name}"
+          fi
+        done
         ls -la release/
 
     - name: Create checksums
