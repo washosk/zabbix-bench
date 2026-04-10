@@ -21,6 +21,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var Version = "dev"
+
 type Config struct {
 	NumHosts       int    `yaml:"hosts"`
 	HostPrefix     string `yaml:"prefix"`
@@ -262,6 +264,11 @@ func main() {
 	// First pass: just grab -config path
 	var cfgFile string
 	var outputJSON string
+	var showVersion bool
+	var showVersionShort bool
+
+	flag.BoolVar(&showVersion, "version", false, "Print release version and exit")
+	flag.BoolVar(&showVersionShort, "v", false, "Print release version and exit")
 	flag.StringVar(&cfgFile, "config", "", "YAML configuration file")
 	flag.StringVar(&outputJSON, "output-json", "", "Output results as JSON to file")
 	flag.IntVar(&cfg.NumHosts, "hosts", cfg.NumHosts, "Number of hosts to create")
@@ -280,6 +287,11 @@ func main() {
 	flag.IntVar(&cfg.BatchHosts, "batch-hosts", cfg.BatchHosts, "Number of hosts to pack into a single bulk Trapper packet")
 	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", cfg.MetricsPerHost, "Number of metrics to send per host")
 	flag.Parse()
+
+	if showVersion || showVersionShort {
+		fmt.Printf("zabbix-bench version %s\n", Version)
+		os.Exit(0)
+	}
 
 	// Load config file first, then CLI flags override
 	if cfgFile != "" {
