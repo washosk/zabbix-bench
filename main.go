@@ -821,22 +821,32 @@ func (bm *Benchmarker) createHostWithItems(hostName string) string {
 	}
 	hostID := hosts[0].HostID
 
-	for _, it := range []struct {
-		key, name string
-		vtype     int
-	}{
-		{"test.bool", "Boolean", 3},
-		{"test.unsigned", "Unsigned", 3},
-		{"test.float", "Float", 0},
-		{"test.text", "Text", 4},
-		{"test.char", "Character", 1},
-		{"test.log", "Log", 2},
-	} {
+	// Map metric types to Zabbix value_type (0=float, 1=char, 2=log, 3=numeric, 4=text)
+	metricTypeMap := map[string]int{
+		"bool":     3,
+		"unsigned": 3,
+		"float":    0,
+		"text":     4,
+		"char":     1,
+		"log":      2,
+	}
+
+	metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
+
+	// Create items matching the metric names generated in sendBatch()
+	for m := 0; m < bm.cfg.MetricsPerHost; m++ {
+		metricType := metricTypes[m%len(metricTypes)]
+		itemKey := fmt.Sprintf("test.metric.%d.%s", m, metricType)
+		itemName := fmt.Sprintf("Metric %d (%s)", m, metricType)
+
 		if err := bm.api.CallWithErrorParse("item.create", map[string]any{
-			"name": it.name, "key_": it.key, "hostid": hostID,
-			"type": 2, "value_type": it.vtype,
+			"name":       itemName,
+			"key_":       itemKey,
+			"hostid":     hostID,
+			"type":       2, // Trapper type
+			"value_type": metricTypeMap[metricType],
 		}, nil); err != nil {
-			log.Printf("Warning: item.create %s on %s: %v", it.key, hostName, err)
+			log.Printf("Warning: item.create %s on %s: %v", itemKey, hostName, err)
 		}
 	}
 	return hostID
