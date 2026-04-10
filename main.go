@@ -492,7 +492,18 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		}
 
 		t0 := time.Now()
-		_, _, _, err := sender.SendMetrics(metrics)
+		var err error
+
+		// Recover from panics in the zabbix sender library
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("sender panic: %v", r)
+				}
+			}()
+			_, _, _, err = sender.SendMetrics(metrics)
+		}()
+
 		latency := time.Since(t0).Milliseconds()
 
 		if err == nil {
