@@ -23,7 +23,7 @@ File: `Formula/zabbix-bench.rb`
 class ZabbixBench < Formula
   desc "High-performance Zabbix NVPS benchmark tool"
   homepage "https://github.com/washosk/zabbix-bench"
-  url "https://github.com/washosk/zabbix-bench/releases/download/v1.0.0/zabbix-bench"
+  url "https://github.com/washosk/zabbix-bench/releases/download/v1.2.1/zabbix-bench"
   sha256 "$(sha256sum zabbix-bench | cut -d' ' -f1)"
   license "MIT"
 
@@ -116,7 +116,7 @@ makepkg --printsrcinfo > .SRCINFO
 
 ```bash
 git add -A
-git commit -m "zabbix-bench v1.0.0"
+git commit -m "zabbix-bench v1.2.1"
 git push origin main
 ```
 

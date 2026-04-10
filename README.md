@@ -33,7 +33,7 @@ It handles the complete lifecycle of a stress test:
 
 ## Requirements
 
-- Go 1.23+ (for building from source)
+- Go 1.24+ (for building from source)
 - Zabbix API access (Admin or Super Admin account)
 - Zabbix Trapper port accessible (default: 10051)
 

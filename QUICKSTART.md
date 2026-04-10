@@ -10,11 +10,11 @@ Get zabbix-bench up and running in minutes.
 
 ```bash
 # Linux x86_64
-wget https://github.com/washosk/zabbix-bench/releases/download/v1.0.0/zabbix-bench
+wget https://github.com/washosk/zabbix-bench/releases/download/v1.2.1/zabbix-bench
 chmod +x zabbix-bench
 
 # Or macOS (Intel)
-wget https://github.com/washosk/zabbix-bench/releases/download/v1.0.0/zabbix-bench-darwin-amd64
+wget https://github.com/washosk/zabbix-bench/releases/download/v1.2.1/zabbix-bench-darwin-amd64
 chmod +x zabbix-bench-darwin-amd64
 ```
 
@@ -173,18 +173,46 @@ Run with:
 
 ```json
 {
+  "duration_seconds": 30.05,
   "hosts_tested": 50,
+  "total_batches": 5417897,
+  "total_values": 32507382,
   "packets_sent": 1846051,
+  "error_count": 0,
+  "error_rate_percent": 0.0,
   "throughput_vps": 54178.39,
   "avg_latency_ms": 5,
+  "min_latency_ms": 0,
+  "max_latency_ms": 1007,
+  "p50_latency_ms": 1,
   "p95_latency_ms": 3,
   "p99_latency_ms": 5,
-  "error_count": 0,
   "errors_by_type": {
     "timeout": 0,
     "closed": 0,
     "network": 0,
-    "other": 0
+    "other": 0,
+    "total": 0
+  },
+  "worker_stats": [
+    {
+      "worker_id": 0,
+      "packets_sent": 92302,
+      "hosts_sent": 2500,
+      "errors": 0,
+      "total_latency_ms": 461510,
+      "min_latency_ms": 1,
+      "max_latency_ms": 150,
+      "avg_latency_ms": 5
+    }
+  ],
+  "config": {
+    "batch_hosts": 50,
+    "hosts": 50,
+    "metrics_per_host": 6,
+    "rate": 0,
+    "senders": 20,
+    "trapper_addr": "127.0.0.1:10051"
   }
 }
 ```
