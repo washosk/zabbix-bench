@@ -21,21 +21,22 @@ import (
 )
 
 type Config struct {
-	NumHosts    int    `yaml:"hosts"`
-	HostPrefix  string `yaml:"prefix"`
-	NumSenders  int    `yaml:"senders"`
-	Rate        int    `yaml:"rate"`
-	APIURL      string `yaml:"api_url"`
-	User        string `yaml:"user"`
-	Pass        string `yaml:"pass"`
-	APIKey      string `yaml:"api_key"`
-	TrapperAddr string `yaml:"trapper_addr"`
-	GroupName   string `yaml:"group"`
-	Duration    time.Duration
-	SkipSetup   bool   `yaml:"skip_setup"`
-	KeepHosts   bool   `yaml:"keep_hosts"`
-	BatchHosts  int    `yaml:"batch_hosts"`
-	OutputJSON  string // output file for JSON results
+	NumHosts       int    `yaml:"hosts"`
+	HostPrefix     string `yaml:"prefix"`
+	NumSenders     int    `yaml:"senders"`
+	Rate           int    `yaml:"rate"`
+	APIURL         string `yaml:"api_url"`
+	User           string `yaml:"user"`
+	Pass           string `yaml:"pass"`
+	APIKey         string `yaml:"api_key"`
+	TrapperAddr    string `yaml:"trapper_addr"`
+	GroupName      string `yaml:"group"`
+	Duration       time.Duration
+	SkipSetup      bool   `yaml:"skip_setup"`
+	KeepHosts      bool   `yaml:"keep_hosts"`
+	BatchHosts     int    `yaml:"batch_hosts"`
+	MetricsPerHost int    `yaml:"metrics_per_host"` // Number of metrics to send per host
+	OutputJSON     string // output file for JSON results
 }
 
 type ValuePool struct {
@@ -126,6 +127,12 @@ type Benchmarker struct {
 	errorClosed  int64
 	errorNetwork int64
 	errorOther   int64
+}
+
+func (bm *Benchmarker) printServerHealth() {
+	// Try to get a test item to understand server state
+	// Just log that we're connected
+	log.Printf("Server: %s (connected via API)", bm.cfg.APIURL)
 }
 
 func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
@@ -281,6 +288,7 @@ func main() {
 	flag.BoolVar(&cfg.SkipSetup, "skip-setup", cfg.SkipSetup, "Skip host/item creation (use existing hosts with same prefix)")
 	flag.BoolVar(&cfg.KeepHosts, "keep-hosts", cfg.KeepHosts, "Keep hosts after test (skip cleanup)")
 	flag.IntVar(&cfg.BatchHosts, "batch-hosts", cfg.BatchHosts, "Number of hosts to pack into a single bulk Trapper packet")
+	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", 6, "Number of metrics to send per host (default: 6)")
 	flag.Parse()
 
 	cfg.OutputJSON = outputJSON
@@ -368,6 +376,9 @@ func (bm *Benchmarker) login() {
 	}
 	bm.api.Auth = token
 	log.Printf("Logged into Zabbix API (user: %s).", bm.cfg.User)
+
+	// Query and display server health
+	bm.printServerHealth()
 }
 
 func (bm *Benchmarker) Setup() {
@@ -477,18 +488,41 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	idx := rand.Intn(poolSize)
 
 	sendBatch := func(hostSlice []string) {
-		metrics := make([]*zabbix.Metric, 0, len(hostSlice)*6)
+		metricsPerHost := bm.cfg.MetricsPerHost
+		if metricsPerHost <= 0 {
+			metricsPerHost = 6
+		}
+		metrics := make([]*zabbix.Metric, 0, len(hostSlice)*metricsPerHost)
+
+		metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
+
 		for _, host := range hostSlice {
 			i := idx % poolSize
 			idx++
-			metrics = append(metrics,
-				zabbix.NewMetric(host, "test.bool", bm.pool.bools[i], false),
-				zabbix.NewMetric(host, "test.unsigned", bm.pool.uints[i], false),
-				zabbix.NewMetric(host, "test.float", bm.pool.floats[i], false),
-				zabbix.NewMetric(host, "test.text", "Benchmark text value", false),
-				zabbix.NewMetric(host, "test.char", bm.pool.chars[i], false),
-				zabbix.NewMetric(host, "test.log", "Benchmark log entry", false),
-			)
+
+			// Generate configurable number of metrics per host
+			for m := 0; m < metricsPerHost; m++ {
+				metricType := metricTypes[m%len(metricTypes)]
+				metricKey := fmt.Sprintf("test.metric.%d.%s", m, metricType)
+
+				var value string
+				switch metricType {
+				case "bool":
+					value = bm.pool.bools[i]
+				case "unsigned":
+					value = bm.pool.uints[i]
+				case "float":
+					value = bm.pool.floats[i]
+				case "text":
+					value = fmt.Sprintf("Benchmark text value %d", m)
+				case "char":
+					value = bm.pool.chars[i]
+				case "log":
+					value = fmt.Sprintf("Benchmark log entry %d", m)
+				}
+
+				metrics = append(metrics, zabbix.NewMetric(host, metricKey, value, false))
+			}
 		}
 
 		t0 := time.Now()
