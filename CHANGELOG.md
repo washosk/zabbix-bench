@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-04-10
+
+### Fixed
+
+- Critical bug in metrics-per-host feature: item creation now dynamically matches the configured MetricsPerHost setting instead of always creating 6 hardcoded items. This fixes silent data loss where metrics were sent to non-existent items and rejected by Zabbix without error reporting.
+- Item keys are now generated using the same naming convention as metrics (test.metric.{index}.{type}) ensuring proper data ingestion
+- Value types for dynamically created items now correctly map to metric types
+
+---
+
 ## [1.0.0] - 2026-04-10
 
 ### Added
