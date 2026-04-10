@@ -17,7 +17,7 @@ import (
 	"time"
 
 	zabbix "github.com/chmller/go-zabbix-sender"
-	zabbixapi "github.com/claranet/go-zabbix-api"
+	zabbixapi "github.com/kgeroczi/go-zabbix-api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -434,23 +434,25 @@ func main() {
 }
 
 func (bm *Benchmarker) login() error {
-	bm.api = zabbixapi.NewAPI(bm.cfg.APIURL)
+	var err error
+	bm.api, err = zabbixapi.NewAPI(zabbixapi.Config{Url: bm.cfg.APIURL})
+	if err != nil {
+		return fmt.Errorf("error initializing API: %v", err)
+	}
 
 	if bm.cfg.APIKey != "" {
-		bm.api.Auth = bm.cfg.APIKey
+		_, err = bm.api.Token(bm.cfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("error injecting api key: %v", err)
+		}
 		log.Printf("Using API token for authentication.")
 		return nil
 	}
 
-	var token string
-	err := bm.api.CallWithErrorParse("user.login", map[string]string{
-		"username": bm.cfg.User,
-		"password": bm.cfg.Pass,
-	}, &token)
+	_, err = bm.api.Login(bm.cfg.User, bm.cfg.Pass)
 	if err != nil {
 		return fmt.Errorf("error logging into Zabbix API: %v", err)
 	}
-	bm.api.Auth = token
 	log.Printf("Logged into Zabbix API (user: %s).", bm.cfg.User)
 
 	// Query and display server health
@@ -882,13 +884,17 @@ func (bm *Benchmarker) ensureHostGroup(name string) (string, error) {
 }
 
 func (bm *Benchmarker) createHostWithItems(hostName string) string {
-	if err := bm.api.HostsCreate(zabbixapi.Hosts{{
-		Host:     hostName,
-		GroupIds: zabbixapi.HostGroupIDs{{GroupID: bm.groupID}},
-		Interfaces: zabbixapi.HostInterfaces{{
-			Type: 1, Main: 1, UseIP: 1, IP: "127.0.0.1", Port: "10050",
+	var result struct {
+		HostIDs []string `json:"hostids"`
+	}
+	if err := bm.api.CallWithErrorParse("host.create", map[string]interface{}{
+		"host":   hostName,
+		"name":   hostName,
+		"groups": []map[string]string{{"groupid": bm.groupID}},
+		"interfaces": []map[string]interface{}{{
+			"type": 1, "main": 1, "useip": 1, "ip": "127.0.0.1", "dns": "", "port": "10050",
 		}},
-	}}); err != nil {
+	}, &result); err != nil {
 		log.Printf("Warning: HostsCreate for %s: %v", hostName, err)
 	}
 

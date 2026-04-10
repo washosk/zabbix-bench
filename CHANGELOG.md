@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-04-10
+
+### Added
+
+- **API Engine Swap**: Migrated the legacy `claranet/go-zabbix-api` engine wrapper to `kgeroczi/go-zabbix-api` to ensure seamless structural integration with modern Zabbix 7.0+ API features.
+
+### Changed
+
+- **Token Safety**: Direct API Token binding using native `.Token()` logic replaces unsafe attribute coupling.
+- **Interfaces Casting**: Strong-typed integer mapping on API interface parameters ensures compliance with modern strict validation policies on Zabbix hosts.
+
+### Fixed
+
+- **Host Creation Subsystem**: Completely circumvented an internal JSON type-casting library defect limiting host arrays by converting generation directly into native REST Map interfaces.
+
+---
+
 ## [1.2.2] - 2026-04-10
 
 ### Fixed
