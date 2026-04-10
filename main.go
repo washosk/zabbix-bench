@@ -182,19 +182,17 @@ func (bm *Benchmarker) recordError(err error, workerID int) {
 }
 
 func contains(s, substr string) bool {
-	for i := 0; i < len(s)-len(substr)+1; i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(s, substr)
+}
+
+func (bm *Benchmarker) sortLatencies() {
+	sort.Slice(bm.latencies, func(i, j int) bool { return bm.latencies[i] < bm.latencies[j] })
 }
 
 func (bm *Benchmarker) calculatePercentile(percent float64) int64 {
 	if len(bm.latencies) == 0 {
 		return 0
 	}
-	sort.Slice(bm.latencies, func(i, j int) bool { return bm.latencies[i] < bm.latencies[j] })
 	index := int(math.Ceil(float64(len(bm.latencies))*percent/100)) - 1
 	if index < 0 {
 		index = 0
@@ -220,16 +218,17 @@ func (bm *Benchmarker) stopped() bool {
 
 func loadConfigFile(path string) (Config, error) {
 	cfg := Config{
-		NumHosts:    10,
-		HostPrefix:  "bench-",
-		NumSenders:  10,
-		Rate:        0,
-		APIURL:      "http://localhost/zabbix/api_jsonrpc.php",
-		User:        "Admin",
-		Pass:        "zabbix",
-		TrapperAddr: "127.0.0.1:10051",
-		GroupName:   "Benchmark-Group",
-		BatchHosts:  50,
+		NumHosts:       10,
+		HostPrefix:     "bench-",
+		NumSenders:     10,
+		Rate:           0,
+		APIURL:         "http://localhost/zabbix/api_jsonrpc.php",
+		User:           "Admin",
+		Pass:           "zabbix",
+		TrapperAddr:    "",
+		GroupName:      "Benchmark-Group",
+		BatchHosts:     50,
+		MetricsPerHost: 6,
 	}
 
 	data, err := os.ReadFile(path)
@@ -245,36 +244,26 @@ func loadConfigFile(path string) (Config, error) {
 }
 
 func main() {
-	var cfgFile string
-	var outputJSON string
-
-	flag.StringVar(&cfgFile, "config", "", "YAML configuration file")
-	flag.StringVar(&outputJSON, "output-json", "", "Output results as JSON to file")
-
-	// Load defaults from file if provided
-	var cfg Config
-	if cfgFile != "" {
-		var err error
-		cfg, err = loadConfigFile(cfgFile)
-		if err != nil {
-			log.Fatalf("Error loading config file: %v", err)
-		}
-	} else {
-		cfg = Config{
-			NumHosts:    10,
-			HostPrefix:  "bench-",
-			NumSenders:  10,
-			Rate:        0,
-			APIURL:      "http://localhost/zabbix/api_jsonrpc.php",
-			User:        "Admin",
-			Pass:        "zabbix",
-			TrapperAddr: "127.0.0.1:10051",
-			GroupName:   "Benchmark-Group",
-			BatchHosts:  50,
-		}
+	// Defaults
+	cfg := Config{
+		NumHosts:       10,
+		HostPrefix:     "bench-",
+		NumSenders:     10,
+		Rate:           0,
+		APIURL:         "http://localhost/zabbix/api_jsonrpc.php",
+		User:           "Admin",
+		Pass:           "zabbix",
+		TrapperAddr:    "",
+		GroupName:      "Benchmark-Group",
+		BatchHosts:     50,
+		MetricsPerHost: 6,
 	}
 
-	// CLI flags override config file
+	// First pass: just grab -config path
+	var cfgFile string
+	var outputJSON string
+	flag.StringVar(&cfgFile, "config", "", "YAML configuration file")
+	flag.StringVar(&outputJSON, "output-json", "", "Output results as JSON to file")
 	flag.IntVar(&cfg.NumHosts, "hosts", cfg.NumHosts, "Number of hosts to create")
 	flag.StringVar(&cfg.HostPrefix, "prefix", cfg.HostPrefix, "Host prefix")
 	flag.IntVar(&cfg.NumSenders, "senders", cfg.NumSenders, "Number of concurrent senders")
@@ -289,8 +278,62 @@ func main() {
 	flag.BoolVar(&cfg.SkipSetup, "skip-setup", cfg.SkipSetup, "Skip host/item creation (use existing hosts with same prefix)")
 	flag.BoolVar(&cfg.KeepHosts, "keep-hosts", cfg.KeepHosts, "Keep hosts after test (skip cleanup)")
 	flag.IntVar(&cfg.BatchHosts, "batch-hosts", cfg.BatchHosts, "Number of hosts to pack into a single bulk Trapper packet")
-	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", 6, "Number of metrics to send per host (default: 6)")
+	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", cfg.MetricsPerHost, "Number of metrics to send per host")
 	flag.Parse()
+
+	// Load config file first, then CLI flags override
+	if cfgFile != "" {
+		fileCfg, err := loadConfigFile(cfgFile)
+		if err != nil {
+			log.Fatalf("Error loading config file: %v", err)
+		}
+		// Apply file values as base, then re-apply any explicitly set CLI flags
+		explicitFlags := make(map[string]bool)
+		flag.Visit(func(f *flag.Flag) { explicitFlags[f.Name] = true })
+
+		if !explicitFlags["hosts"] {
+			cfg.NumHosts = fileCfg.NumHosts
+		}
+		if !explicitFlags["prefix"] {
+			cfg.HostPrefix = fileCfg.HostPrefix
+		}
+		if !explicitFlags["senders"] {
+			cfg.NumSenders = fileCfg.NumSenders
+		}
+		if !explicitFlags["rate"] {
+			cfg.Rate = fileCfg.Rate
+		}
+		if !explicitFlags["api-url"] {
+			cfg.APIURL = fileCfg.APIURL
+		}
+		if !explicitFlags["user"] {
+			cfg.User = fileCfg.User
+		}
+		if !explicitFlags["pass"] {
+			cfg.Pass = fileCfg.Pass
+		}
+		if !explicitFlags["api-key"] {
+			cfg.APIKey = fileCfg.APIKey
+		}
+		if !explicitFlags["trapper-addr"] {
+			cfg.TrapperAddr = fileCfg.TrapperAddr
+		}
+		if !explicitFlags["group"] {
+			cfg.GroupName = fileCfg.GroupName
+		}
+		if !explicitFlags["skip-setup"] {
+			cfg.SkipSetup = fileCfg.SkipSetup
+		}
+		if !explicitFlags["keep-hosts"] {
+			cfg.KeepHosts = fileCfg.KeepHosts
+		}
+		if !explicitFlags["batch-hosts"] {
+			cfg.BatchHosts = fileCfg.BatchHosts
+		}
+		if !explicitFlags["metrics-per-host"] {
+			cfg.MetricsPerHost = fileCfg.MetricsPerHost
+		}
+	}
 
 	cfg.OutputJSON = outputJSON
 
@@ -305,24 +348,23 @@ func main() {
 		}
 	}
 
-	// If trapper address not explicitly set, derive it from API URL
-	if cfg.TrapperAddr == "127.0.0.1:10051" && cfg.APIURL != "http://localhost/zabbix/api_jsonrpc.php" {
-		// Extract host from API URL
+	// If trapper address not set, derive it from API URL
+	if cfg.TrapperAddr == "" {
 		apiURL := cfg.APIURL
-		// Remove protocol
 		if idx := strings.Index(apiURL, "://"); idx >= 0 {
 			apiURL = apiURL[idx+3:]
 		}
-		// Extract host (before first / or :)
 		var host string
 		if idx := strings.IndexAny(apiURL, "/:"); idx >= 0 {
 			host = apiURL[:idx]
 		} else {
 			host = apiURL
 		}
-		if host != "" && host != "localhost" {
+		if host != "" && host != "localhost" && host != "127.0.0.1" {
 			cfg.TrapperAddr = host + ":10051"
 			log.Printf("Auto-detected Trapper address from API URL: %s", cfg.TrapperAddr)
+		} else {
+			cfg.TrapperAddr = "127.0.0.1:10051"
 		}
 	}
 
@@ -368,7 +410,7 @@ func main() {
 	bm.Run()
 
 	result := bm.GenerateResult()
-	bm.PrintSummary(result)
+	bm.PrintSummary(result, cfg.MetricsPerHost)
 
 	if cfg.OutputJSON != "" {
 		bm.ExportJSON(result)
@@ -488,8 +530,9 @@ func (bm *Benchmarker) Run() {
 				packets := atomic.LoadInt64(&bm.totalPackets)
 				errs := atomic.LoadInt64(&bm.totalErrors)
 				elapsed := time.Since(bm.startTime).Seconds()
-				vps := float64(batches*6) / elapsed
-				intervalVPS := float64((batches-lastBatches)*6) / 5.0
+				mph := int64(bm.cfg.MetricsPerHost)
+				vps := float64(batches*mph) / elapsed
+				intervalVPS := float64((batches-lastBatches)*mph) / 5.0
 				lastBatches = batches
 				errRate := 0.0
 				if packets+errs > 0 {
@@ -585,6 +628,9 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 
 	sendAll := func() {
 		for i := 0; i < len(hosts); i += batchSize {
+			if bm.stopped() {
+				return
+			}
 			end := i + batchSize
 			if end > len(hosts) {
 				end = len(hosts)
@@ -620,7 +666,8 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	packets := atomic.LoadInt64(&bm.totalPackets)
 	errs := atomic.LoadInt64(&bm.totalErrors)
 	latTotal := atomic.LoadInt64(&bm.totalLatencyMs)
-	values := batches * 6
+	mph := int64(bm.cfg.MetricsPerHost)
+	values := batches * mph
 
 	var minLat, maxLat int64
 	if len(bm.latencies) > 0 {
@@ -635,6 +682,8 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 			}
 		}
 	}
+
+	bm.sortLatencies()
 
 	avgLatency := int64(0)
 	if packets > 0 {
@@ -683,10 +732,18 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 			Total:   int(errs),
 		},
 		WorkerStats: workerStats,
+		Config: map[string]any{
+			"hosts":            bm.cfg.NumHosts,
+			"senders":          bm.cfg.NumSenders,
+			"metrics_per_host": bm.cfg.MetricsPerHost,
+			"batch_hosts":      bm.cfg.BatchHosts,
+			"rate":             bm.cfg.Rate,
+			"trapper_addr":     bm.cfg.TrapperAddr,
+		},
 	}
 }
 
-func (bm *Benchmarker) PrintSummary(result BenchmarkResult) {
+func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) {
 	fmt.Println()
 	fmt.Println("╔════════════════════════════════════════════════════════╗")
 	fmt.Println("║           BENCHMARK SUMMARY REPORT                    ║")
@@ -718,9 +775,9 @@ func (bm *Benchmarker) PrintSummary(result BenchmarkResult) {
 		fmt.Println("║  Per-worker statistics:                                ║")
 		for _, ws := range result.WorkerStats {
 			if ws.PacketsSent > 0 {
+				workerVPS := float64(ws.HostsSent*int64(metricsPerHost)) / result.Duration
 				fmt.Printf("║    Worker %d: %d packets, %d hosts, %d errors, %.0f VPS║\n",
-					ws.ID, ws.PacketsSent, ws.HostsSent, ws.ErrorCount,
-					float64(ws.HostsSent*6)/float64(ws.PacketsSent*5)) // rough VPS estimate
+					ws.ID, ws.PacketsSent, ws.HostsSent, ws.ErrorCount, workerVPS)
 			}
 		}
 		fmt.Println("╠════════════════════════════════════════════════════════╣")
@@ -799,7 +856,10 @@ func (bm *Benchmarker) ensureHostGroup(name string) string {
 	if err := bm.api.HostGroupsCreate(zabbixapi.HostGroups{{Name: name}}); err != nil {
 		log.Fatalf("Failed to create host group: %v", err)
 	}
-	groups, _ = bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
+	groups, err = bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
+	if err != nil || len(groups) == 0 {
+		log.Fatalf("Failed to retrieve host group after creation: %v", err)
+	}
 	return groups[0].GroupID
 }
 
