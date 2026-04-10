@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -301,6 +302,27 @@ func main() {
 		cfg.Pass = os.Getenv("ZABBIX_PASS")
 		if cfg.Pass == "" {
 			cfg.Pass = "zabbix"
+		}
+	}
+
+	// If trapper address not explicitly set, derive it from API URL
+	if cfg.TrapperAddr == "127.0.0.1:10051" && cfg.APIURL != "http://localhost/zabbix/api_jsonrpc.php" {
+		// Extract host from API URL
+		apiURL := cfg.APIURL
+		// Remove protocol
+		if idx := strings.Index(apiURL, "://"); idx >= 0 {
+			apiURL = apiURL[idx+3:]
+		}
+		// Extract host (before first / or :)
+		var host string
+		if idx := strings.IndexAny(apiURL, "/:"); idx >= 0 {
+			host = apiURL[:idx]
+		} else {
+			host = apiURL
+		}
+		if host != "" && host != "localhost" {
+			cfg.TrapperAddr = host + ":10051"
+			log.Printf("Auto-detected Trapper address from API URL: %s", cfg.TrapperAddr)
 		}
 	}
 
