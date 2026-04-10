@@ -32,11 +32,11 @@ jobs:
     - name: Check for security issues with gosec
       uses: securego/gosec@master
       with:
-        args: '-no-fail -fmt json -out gosec-report.json ./...'
+        args: '-no-fail -fmt sarif -out gosec-report.sarif ./...'
       continue-on-error: true
 
     - name: Upload Gosec report
       uses: github/codeql-action/upload-sarif@v3.27.3
       with:
-        sarif_file: gosec-report.json
+        sarif_file: gosec-report.sarif
       continue-on-error: true
