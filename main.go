@@ -65,34 +65,34 @@ type ErrorCategory struct {
 }
 
 type WorkerStats struct {
-	ID              int   `json:"worker_id"`
-	PacketsSent     int64 `json:"packets_sent"`
-	HostsSent       int64 `json:"hosts_sent"`
-	ErrorCount      int64 `json:"errors"`
-	TotalLatencyMs  int64 `json:"total_latency_ms"`
-	MinLatencyMs    int64 `json:"min_latency_ms"`
-	MaxLatencyMs    int64 `json:"max_latency_ms"`
-	AvgLatencyMs    int64 `json:"avg_latency_ms"`
+	ID             int   `json:"worker_id"`
+	PacketsSent    int64 `json:"packets_sent"`
+	HostsSent      int64 `json:"hosts_sent"`
+	ErrorCount     int64 `json:"errors"`
+	TotalLatencyMs int64 `json:"total_latency_ms"`
+	MinLatencyMs   int64 `json:"min_latency_ms"`
+	MaxLatencyMs   int64 `json:"max_latency_ms"`
+	AvgLatencyMs   int64 `json:"avg_latency_ms"`
 }
 
 type BenchmarkResult struct {
-	Duration           float64        `json:"duration_seconds"`
-	HostsTested        int            `json:"hosts_tested"`
-	TotalBatches       int64          `json:"total_batches"`
-	TotalValues        int64          `json:"total_values"`
-	PacketsSent        int64          `json:"packets_sent"`
-	ErrorCount         int64          `json:"error_count"`
-	ErrorRate          float64        `json:"error_rate_percent"`
-	Throughput         float64        `json:"throughput_vps"`
-	AvgLatencyMs       int64          `json:"avg_latency_ms"`
-	MinLatencyMs       int64          `json:"min_latency_ms"`
-	MaxLatencyMs       int64          `json:"max_latency_ms"`
-	P50LatencyMs       int64          `json:"p50_latency_ms"`
-	P95LatencyMs       int64          `json:"p95_latency_ms"`
-	P99LatencyMs       int64          `json:"p99_latency_ms"`
-	ErrorsByType       ErrorCategory  `json:"errors_by_type"`
-	WorkerStats        []WorkerStats  `json:"worker_stats"`
-	Config             any            `json:"config"`
+	Duration     float64       `json:"duration_seconds"`
+	HostsTested  int           `json:"hosts_tested"`
+	TotalBatches int64         `json:"total_batches"`
+	TotalValues  int64         `json:"total_values"`
+	PacketsSent  int64         `json:"packets_sent"`
+	ErrorCount   int64         `json:"error_count"`
+	ErrorRate    float64       `json:"error_rate_percent"`
+	Throughput   float64       `json:"throughput_vps"`
+	AvgLatencyMs int64         `json:"avg_latency_ms"`
+	MinLatencyMs int64         `json:"min_latency_ms"`
+	MaxLatencyMs int64         `json:"max_latency_ms"`
+	P50LatencyMs int64         `json:"p50_latency_ms"`
+	P95LatencyMs int64         `json:"p95_latency_ms"`
+	P99LatencyMs int64         `json:"p99_latency_ms"`
+	ErrorsByType ErrorCategory `json:"errors_by_type"`
+	WorkerStats  []WorkerStats `json:"worker_stats"`
+	Config       any           `json:"config"`
 }
 
 type Benchmarker struct {
@@ -592,20 +592,20 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	bm.workerMu.Unlock()
 
 	return BenchmarkResult{
-		Duration:      time.Since(time.Time{}).Seconds(), // Will be set by PrintSummary
-		HostsTested:   len(bm.hostNames),
-		TotalBatches:  batches,
-		TotalValues:   values,
-		PacketsSent:   packets,
-		ErrorCount:    errs,
-		ErrorRate:     errRate,
-		Throughput:    float64(values) / time.Since(time.Time{}).Seconds(),
-		AvgLatencyMs:  avgLatency,
-		MinLatencyMs:  minLat,
-		MaxLatencyMs:  maxLat,
-		P50LatencyMs:  bm.calculatePercentile(50),
-		P95LatencyMs:  bm.calculatePercentile(95),
-		P99LatencyMs:  bm.calculatePercentile(99),
+		Duration:     time.Since(time.Time{}).Seconds(), // Will be set by PrintSummary
+		HostsTested:  len(bm.hostNames),
+		TotalBatches: batches,
+		TotalValues:  values,
+		PacketsSent:  packets,
+		ErrorCount:   errs,
+		ErrorRate:    errRate,
+		Throughput:   float64(values) / time.Since(time.Time{}).Seconds(),
+		AvgLatencyMs: avgLatency,
+		MinLatencyMs: minLat,
+		MaxLatencyMs: maxLat,
+		P50LatencyMs: bm.calculatePercentile(50),
+		P95LatencyMs: bm.calculatePercentile(95),
+		P99LatencyMs: bm.calculatePercentile(99),
 		ErrorsByType: ErrorCategory{
 			Timeout: int(atomic.LoadInt64(&bm.errorTimeout)),
 			Closed:  int(atomic.LoadInt64(&bm.errorClosed)),
