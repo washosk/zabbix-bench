@@ -105,6 +105,7 @@ type Benchmarker struct {
 	pool      *ValuePool
 	done      chan struct{}
 	stopOnce  sync.Once
+	startTime time.Time
 
 	// Per-worker stats
 	workerStats map[int]*WorkerStats
@@ -423,7 +424,7 @@ func (bm *Benchmarker) Run() {
 
 	var wg sync.WaitGroup
 	hostsPerWorker := (len(bm.hostNames) + bm.cfg.NumSenders - 1) / bm.cfg.NumSenders
-	startTime := time.Now()
+	bm.startTime = time.Now()
 
 	for i := 0; i < bm.cfg.NumSenders; i++ {
 		start := i * hostsPerWorker
@@ -453,7 +454,7 @@ func (bm *Benchmarker) Run() {
 				batches := atomic.LoadInt64(&bm.totalBatches)
 				packets := atomic.LoadInt64(&bm.totalPackets)
 				errs := atomic.LoadInt64(&bm.totalErrors)
-				elapsed := time.Since(startTime).Seconds()
+				elapsed := time.Since(bm.startTime).Seconds()
 				vps := float64(batches*6) / elapsed
 				intervalVPS := float64((batches-lastBatches)*6) / 5.0
 				lastBatches = batches
@@ -591,15 +592,16 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	}
 	bm.workerMu.Unlock()
 
+	elapsed := time.Since(bm.startTime).Seconds()
 	return BenchmarkResult{
-		Duration:     time.Since(time.Time{}).Seconds(), // Will be set by PrintSummary
+		Duration:     elapsed,
 		HostsTested:  len(bm.hostNames),
 		TotalBatches: batches,
 		TotalValues:  values,
 		PacketsSent:  packets,
 		ErrorCount:   errs,
 		ErrorRate:    errRate,
-		Throughput:   float64(values) / time.Since(time.Time{}).Seconds(),
+		Throughput:   float64(values) / elapsed,
 		AvgLatencyMs: avgLatency,
 		MinLatencyMs: minLat,
 		MaxLatencyMs: maxLat,
