@@ -42,8 +42,8 @@ type Config struct {
 	SkipSetup      bool   `yaml:"skip_setup"`
 	KeepHosts      bool   `yaml:"keep_hosts"`
 	BatchHosts     int    `yaml:"batch_hosts"`
-	MaxBatchSize   int    `yaml:"max_batch_size"` // Maximum total metrics per batch
-	PoolSize       int    `yaml:"pool_size"`      // TCP connection pool size
+	MaxBatchSize   int    `yaml:"max_batch_size"`   // Maximum total metrics per batch
+	PoolSize       int    `yaml:"pool_size"`        // TCP connection pool size
 	MetricsPerHost int    `yaml:"metrics_per_host"` // Number of metrics to send per host
 	OutputJSON     string // output file for JSON results
 }
