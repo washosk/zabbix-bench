@@ -509,7 +509,10 @@ func (s *PooledSender) putConn(conn net.Conn) {
 
 func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
 	packet := zabbix.NewPacket(metrics, false)
-	dataPacket, _ := json.Marshal(packet)
+	dataPacket, err := json.Marshal(packet)
+	if err != nil {
+		return fmt.Errorf("marshal packet error: %v", err)
+	}
 
 	buffer := append([]byte("ZBXD\x01"), packet.DataLen()...)
 	buffer = append(buffer, dataPacket...)
