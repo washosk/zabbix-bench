@@ -523,7 +523,10 @@ func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
 	}
 
 	for {
-		conn.SetDeadline(time.Now().Add(s.timeout))
+		if err = conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
+			conn.Close()
+			return fmt.Errorf("set deadline error: %v", err)
+		}
 
 		_, err = conn.Write(buffer)
 		if err != nil {
@@ -874,8 +877,8 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 		if stats, ok := bm.workerStats[i]; ok {
 			if stats.PacketsSent > 0 {
 				stats.AvgLatencyMs = stats.TotalLatencyMs / stats.PacketsSent
+				workerStats = append(workerStats, *stats)
 			}
-			workerStats = append(workerStats, *stats)
 		}
 	}
 	bm.workerMu.Unlock()
