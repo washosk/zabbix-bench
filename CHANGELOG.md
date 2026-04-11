@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.4] - 2026-04-11
+
+### Fixed
+
+- **Latency Slice Cap**: Latency samples are now capped at 1,000,000 entries to prevent unbounded memory growth at high throughput.
+- **Connection Pool Cleanup**: TCP connections sitting idle in the pool are now drained and closed after the benchmark finishes, eliminating file descriptor leaks.
+- **Division by Zero in Throughput**: Elapsed time is now guarded with a 1ms minimum in both the progress ticker and final result, preventing `+Inf` VPS on very short runs.
+- **Signal Handler Goroutine Leak**: The signal handler goroutine now exits cleanly when the benchmark finishes normally via duration timer, instead of blocking on the signal channel indefinitely.
+- **Global Mutex Contention**: Replaced the single shared `workerMu` with a per-worker mutex slice, eliminating lock contention across 200+ concurrent senders.
+
+---
+
 ## [1.3.3] - 2026-04-11
 
 ### Fixed
@@ -281,6 +293,7 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 1.3.4 | 2026-04-11 | Stable | Performance and stability fixes |
 | 1.3.3 | 2026-04-11 | Stable | Bug fixes |
 | 1.3.2 | 2026-04-10 | Stable | Connection pooling, metric-based batching |
 | 1.3.1 | 2026-04-10 | Stable | Version flag |

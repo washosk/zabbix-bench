@@ -25,7 +25,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.3.3"
+var Version = "1.3.4"
+
+const maxLatencySamples = 1_000_000
 
 type Config struct {
 	NumHosts       int    `yaml:"hosts"`
@@ -119,9 +121,9 @@ type Benchmarker struct {
 
 	pooledSender *PooledSender
 
-	// Per-worker stats
-	workerStats map[int]*WorkerStats
-	workerMu    sync.Mutex
+	// Per-worker stats (indexed by workerID; per-worker mutex to avoid global contention)
+	workerStats []*WorkerStats
+	workerMu    []sync.Mutex
 
 	// Global atomic counters
 	totalBatches   int64
@@ -149,33 +151,32 @@ func (bm *Benchmarker) printServerHealth() {
 func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 	atomic.AddInt64(&bm.totalLatencyMs, latencyMs)
 	bm.latenciesMu.Lock()
-	bm.latencies = append(bm.latencies, latencyMs)
+	if len(bm.latencies) < maxLatencySamples {
+		bm.latencies = append(bm.latencies, latencyMs)
+	}
 	bm.latenciesMu.Unlock()
 
-	if workerID >= 0 {
-		bm.workerMu.Lock()
-		if stats, ok := bm.workerStats[workerID]; ok {
-			stats.TotalLatencyMs += latencyMs
-			if latencyMs < stats.MinLatencyMs {
-				stats.MinLatencyMs = latencyMs
-			}
-			if latencyMs > stats.MaxLatencyMs {
-				stats.MaxLatencyMs = latencyMs
-			}
+	if workerID >= 0 && workerID < len(bm.workerStats) {
+		bm.workerMu[workerID].Lock()
+		stats := bm.workerStats[workerID]
+		stats.TotalLatencyMs += latencyMs
+		if latencyMs < stats.MinLatencyMs {
+			stats.MinLatencyMs = latencyMs
 		}
-		bm.workerMu.Unlock()
+		if latencyMs > stats.MaxLatencyMs {
+			stats.MaxLatencyMs = latencyMs
+		}
+		bm.workerMu[workerID].Unlock()
 	}
 }
 
 func (bm *Benchmarker) recordError(err error, workerID int) {
 	atomic.AddInt64(&bm.totalErrors, 1)
 
-	if workerID >= 0 {
-		bm.workerMu.Lock()
-		if stats, ok := bm.workerStats[workerID]; ok {
-			stats.ErrorCount++
-		}
-		bm.workerMu.Unlock()
+	if workerID >= 0 && workerID < len(bm.workerStats) {
+		bm.workerMu[workerID].Lock()
+		bm.workerStats[workerID].ErrorCount++
+		bm.workerMu[workerID].Unlock()
 	}
 
 	errStr := err.Error()
@@ -411,7 +412,6 @@ func main() {
 		cfg:          cfg,
 		pool:         newValuePool(1024),
 		done:         make(chan struct{}),
-		workerStats:  make(map[int]*WorkerStats),
 		latencies:    make([]int64, 0, 100000),
 		pooledSender: NewPooledSender(cfg.TrapperAddr, cfg.PoolSize),
 	}
@@ -420,11 +420,14 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		<-sigChan
-		signal.Reset(os.Interrupt, syscall.SIGTERM)
-		fmt.Println()
-		log.Printf("Interrupt received. Stopping benchmark (Ctrl+C again to force quit)...")
-		bm.Stop()
+		select {
+		case <-sigChan:
+			signal.Reset(os.Interrupt, syscall.SIGTERM)
+			fmt.Println()
+			log.Printf("Interrupt received. Stopping benchmark (Ctrl+C again to force quit)...")
+			bm.Stop()
+		case <-bm.done:
+		}
 	}()
 
 	if cfg.SkipSetup {
@@ -453,6 +456,7 @@ func main() {
 	}
 
 	bm.Run()
+	bm.pooledSender.Close()
 
 	result := bm.GenerateResult()
 	bm.PrintSummary(result, cfg.MetricsPerHost)
@@ -505,6 +509,20 @@ func (s *PooledSender) putConn(conn net.Conn) {
 		}
 	}
 	conn.Close()
+}
+
+func (s *PooledSender) Close() {
+	if s.pool == nil {
+		return
+	}
+	for {
+		select {
+		case conn := <-s.pool:
+			conn.Close()
+		default:
+			return
+		}
+	}
 }
 
 func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
@@ -666,7 +684,9 @@ func (bm *Benchmarker) Run() {
 	log.Printf("Hosts: %d | Senders: %d | Batch: %d | Flood: %v | Duration: %v",
 		len(bm.hostNames), bm.cfg.NumSenders, bm.cfg.BatchHosts, floodMode, bm.cfg.Duration)
 
-	// Initialize per-worker stats
+	// Initialize per-worker stats and per-worker mutexes
+	bm.workerStats = make([]*WorkerStats, bm.cfg.NumSenders)
+	bm.workerMu = make([]sync.Mutex, bm.cfg.NumSenders)
 	for i := 0; i < bm.cfg.NumSenders; i++ {
 		bm.workerStats[i] = &WorkerStats{ID: i, MinLatencyMs: math.MaxInt64}
 	}
@@ -704,6 +724,9 @@ func (bm *Benchmarker) Run() {
 				packets := atomic.LoadInt64(&bm.totalPackets)
 				errs := atomic.LoadInt64(&bm.totalErrors)
 				elapsed := time.Since(bm.startTime).Seconds()
+				if elapsed < 0.001 {
+					elapsed = 0.001
+				}
 				mph := int64(bm.cfg.MetricsPerHost)
 				vps := float64(batches*mph) / elapsed
 				intervalVPS := float64((batches-lastBatches)*mph) / 5.0
@@ -783,12 +806,10 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 			atomic.AddInt64(&bm.totalPackets, 1)
 			bm.recordLatency(latency, workerID)
 
-			bm.workerMu.Lock()
-			if stats, ok := bm.workerStats[workerID]; ok {
-				stats.PacketsSent++
-				stats.HostsSent += int64(len(hostSlice))
-			}
-			bm.workerMu.Unlock()
+			bm.workerMu[workerID].Lock()
+			bm.workerStats[workerID].PacketsSent++
+			bm.workerStats[workerID].HostsSent += int64(len(hostSlice))
+			bm.workerMu[workerID].Unlock()
 		} else {
 			bm.recordError(err, workerID)
 		}
@@ -870,20 +891,19 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 		errRate = float64(errs) / float64(packets+errs) * 100
 	}
 
-	// Collect worker stats
-	bm.workerMu.Lock()
+	// Collect worker stats — called after wg.Wait(), no concurrent writes possible
 	workerStats := make([]WorkerStats, 0, len(bm.workerStats))
-	for i := 0; i < len(bm.workerStats); i++ {
-		if stats, ok := bm.workerStats[i]; ok {
-			if stats.PacketsSent > 0 {
-				stats.AvgLatencyMs = stats.TotalLatencyMs / stats.PacketsSent
-				workerStats = append(workerStats, *stats)
-			}
+	for _, stats := range bm.workerStats {
+		if stats != nil && stats.PacketsSent > 0 {
+			stats.AvgLatencyMs = stats.TotalLatencyMs / stats.PacketsSent
+			workerStats = append(workerStats, *stats)
 		}
 	}
-	bm.workerMu.Unlock()
 
 	elapsed := time.Since(bm.startTime).Seconds()
+	if elapsed < 0.001 {
+		elapsed = 0.001
+	}
 	return BenchmarkResult{
 		Duration:     elapsed,
 		HostsTested:  len(bm.hostNames),
