@@ -10,11 +10,11 @@ Get zabbix-bench up and running in minutes.
 
 ```bash
 # Linux x86_64
-wget https://github.com/washosk/zabbix-bench/releases/download/v1.2.1/zabbix-bench
-chmod +x zabbix-bench
+wget https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench-linux-amd64
+chmod +x zabbix-bench-linux-amd64
 
 # Or macOS (Intel)
-wget https://github.com/washosk/zabbix-bench/releases/download/v1.2.1/zabbix-bench-darwin-amd64
+wget https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench-darwin-amd64
 chmod +x zabbix-bench-darwin-amd64
 ```
 

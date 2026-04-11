@@ -139,10 +139,9 @@ Improvement: +Z%"
 
 ### High priority
 
-- [ ] Custom item type configuration (currently hardcoded 6 types)
-- [ ] Connection pooling for Trapper sender
 - [ ] Extended metric tracking (histogram buckets)
 - [ ] More package manager support (DEB, RPM)
+- [ ] Custom item type configuration beyond the 6 built-in types
 
 ### Medium priority
 

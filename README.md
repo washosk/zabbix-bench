@@ -16,8 +16,10 @@ It handles the complete lifecycle of a stress test:
 - 6 metric types cycled per host: Boolean, Unsigned, Float, Text, Character, Log
 - Flood mode (`-rate 0`) sends metrics as fast as possible with no artificial delay
 - Bulk Trapper packets pack multiple hosts per packet to maximize throughput
+- TCP connection pool (`-pool-size`) for persistent connections with stale connection auto-retry
+- Metric-based batching (`-batch-metrics`) to cap payload size independently of host count
 - Pre-generated value pool eliminates `rand` overhead in the hot loop
-- Atomic error and latency tracking with zero lock contention
+- Per-worker atomic latency and error tracking with minimal lock contention
 - Real-time progress reporting every 5 seconds (VPS, errors, latency)
 - Latency percentiles (P50, P95, P99) for detailed performance analysis
 - Per-worker statistics for identifying bottlenecks
@@ -89,7 +91,9 @@ Flags:
   -senders          int       Number of concurrent sender goroutines (default 10)
   -rate             int       Batches per second per host; 0 = flood mode (default 0)
   -batch-hosts      int       Hosts per bulk Trapper packet (default 50)
+  -batch-metrics    int       Maximum metrics per packet; overrides -batch-hosts when set (default 5000)
   -metrics-per-host int       Number of metrics to send per host (default 6)
+  -pool-size        int       TCP connection pool size; 0 = disabled, one connection per send (default 0)
   -duration         duration  Benchmark duration e.g. 30s, 2m (0 = run until Ctrl+C)
   -skip-setup       bool      Skip host/item creation, use hosts that already exist
   -keep-hosts       bool      Skip cleanup after test; keep hosts in Zabbix
@@ -417,7 +421,7 @@ watch -n 5 'zabbix_server -R diaginfo | grep -E "Queue|Cache|busy"'
 
 ## Dependencies
 
-- <https://github.com/claranet/go-zabbix-api> -- Zabbix API client
+- <https://github.com/kgeroczi/go-zabbix-api> -- Zabbix API client
 - <https://github.com/chmller/go-zabbix-sender> -- Zabbix Trapper sender
 
 ---
