@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - 2026-04-11
+
+### Fixed
+
+- **JSON Marshal Error**: `SendMetrics` now returns an error instead of silently sending a malformed packet when `json.Marshal` fails.
+- **Connection Deadline**: `SetDeadline` errors on TCP connections are now caught and returned immediately instead of being ignored.
+- **Idle Workers in Results**: Worker stats with zero packets sent are no longer included in the benchmark report or JSON output.
+- **Min Latency Tracking**: `MinLatencyMs` is now initialized to `math.MaxInt64` per worker, eliminating ambiguity between an unset value and an actual 0ms latency.
+
+---
+
 ## [1.3.2] - 2026-04-10
 
 ### Added
@@ -53,6 +64,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auth Integrity**: Environment variables (`ZABBIX_PASS`) are now securely registered and processed over defaults.
 - **Setup Speed**: Vastly optimized the item creation block into grouped API matrices, dropping network payload time exponentially.
 - **Latency Compute**: Bypassed O(N) evaluation bounds during generation stats, scaling direct O(1) reads pre-sort.
+
+---
+
+## [1.2.1] - 2026-04-10
+
+### Fixed
+
+- **CI Permissions**: Added write permissions to the release job to allow artifact uploads.
+- **Release Workflow**: Fixed CI trigger to fire correctly on version tags.
+- **Windows Build**: Resolved Windows CI build failure introduced in v1.2.0.
+
+---
+
+## [1.2.0] - 2026-04-10
+
+### Fixed
+
+- **VPS Calculations**: Corrected throughput calculations that were producing incorrect values per second.
+- **Config Loading**: Fixed YAML config file loading to properly merge with CLI flag overrides.
+- **Shutdown Behavior**: Resolved a race condition causing ungraceful shutdown on interrupt.
+
+---
+
+## [1.1.0] - 2026-04-10
+
+### Fixed
+
+- **Dynamic Item Creation**: Items are now created to match the configured `-metrics-per-host` value instead of always defaulting to 6.
+- **Metrics Key Naming**: Item keys now use the same `test.metric.{index}.{type}` convention as sent metrics, preventing silent data rejection by Zabbix.
+
+---
+
+## [1.0.9] - 2026-04-10
+
+### Added
+
+- **Auto-detect Trapper Address**: Trapper address is now automatically derived from the API URL when `-trapper-addr` is not explicitly set.
+
+---
+
+## [1.0.8] - 2026-04-10
+
+### Added
+
+- **Configurable Metrics Per Host**: Introduced `-metrics-per-host` flag for deeper and more flexible stress testing configurations.
+
+---
+
+## [1.0.7] - 2026-04-10
+
+### Fixed
+
+- **Panic Recovery**: Added recovery handler for malformed server responses in the Zabbix sender to prevent full process crashes.
+
+---
+
+## [1.0.6] - 2026-04-10
+
+### Fixed
+
+- **Duration Calculation**: Corrected elapsed time computation used for throughput reporting in both terminal output and JSON export.
+- **Throughput in JSON**: JSON export now reflects accurate VPS values consistent with the terminal summary.
+
+---
+
+## [1.0.5] - 2026-04-10
+
+### Fixed
+
+- **CI Security Scan**: Switched gosec report to SARIF format for compatibility with GitHub code scanning.
+
+---
+
+## [1.0.4] - 2026-04-10
+
+### Fixed
+
+- **Markdown Linting**: Resolved all markdown lint errors in documentation files.
+
+---
+
+## [1.0.3] - 2026-04-10
+
+### Fixed
+
+- **GitHub Actions**: Updated workflow actions to versions compatible with Node.js 24 runtime.
+
+---
+
+## [1.0.2] - 2026-04-10
+
+### Fixed
+
+- **GitHub Actions**: Opted into Node.js 24 for GitHub Actions runner compatibility.
 
 ---
 
@@ -175,7 +280,24 @@ go install github.com/washosk/zabbix-bench@latest
 ## Version history reference
 
 | Version | Release Date | Status | Notes |
-|---------|--------------|--------|-------|
+| --- | --- | --- | --- |
+| 1.3.3 | 2026-04-11 | Stable | Bug fixes |
+| 1.3.2 | 2026-04-10 | Stable | Connection pooling, metric-based batching |
+| 1.3.1 | 2026-04-10 | Stable | Version flag |
+| 1.3.0 | 2026-04-10 | Stable | API engine swap |
+| 1.2.2 | 2026-04-10 | Stable | Stability fixes |
+| 1.2.1 | 2026-04-10 | Stable | CI/CD fixes |
+| 1.2.0 | 2026-04-10 | Stable | VPS and config fixes |
+| 1.1.0 | 2026-04-10 | Stable | Dynamic item creation |
+| 1.0.9 | 2026-04-10 | Stable | Auto-detect trapper address |
+| 1.0.8 | 2026-04-10 | Stable | Configurable metrics per host |
+| 1.0.7 | 2026-04-10 | Stable | Panic recovery |
+| 1.0.6 | 2026-04-10 | Stable | Duration and throughput fixes |
+| 1.0.5 | 2026-04-10 | Stable | CI security scan fix |
+| 1.0.4 | 2026-04-10 | Stable | Markdown linting |
+| 1.0.3 | 2026-04-10 | Stable | GitHub Actions update |
+| 1.0.2 | 2026-04-10 | Stable | GitHub Actions Node.js 24 |
+| 1.0.1 | 2026-04-10 | Stable | Item creation fix |
 | 1.0.0 | 2026-04-10 | Stable | Initial release |
 
 ---

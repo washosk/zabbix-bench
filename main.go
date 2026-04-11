@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.3.2"
+var Version = "1.3.3"
 
 type Config struct {
 	NumHosts       int    `yaml:"hosts"`
