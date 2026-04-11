@@ -533,11 +533,11 @@ func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
 			conn.Close()
 			if isPooled {
 				// Retry once with a new connection if the pooled one was stale
-				conn, isPooled, err = s.getConn()
+				conn, _, err = s.getConn()
 				if err != nil {
 					return err
 				}
-				isPooled = false // It's definitely new now (or we're loop-breaking)
+				isPooled = false
 				continue
 			}
 			return fmt.Errorf("write error: %v", err)
@@ -549,7 +549,7 @@ func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
 			conn.Close()
 			if isPooled {
 				// Retry once
-				conn, isPooled, err = s.getConn()
+				conn, _, err = s.getConn()
 				if err != nil {
 					return err
 				}
