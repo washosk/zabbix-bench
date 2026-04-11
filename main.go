@@ -156,7 +156,7 @@ func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 		bm.workerMu.Lock()
 		if stats, ok := bm.workerStats[workerID]; ok {
 			stats.TotalLatencyMs += latencyMs
-			if latencyMs < stats.MinLatencyMs || stats.MinLatencyMs == 0 {
+			if latencyMs < stats.MinLatencyMs {
 				stats.MinLatencyMs = latencyMs
 			}
 			if latencyMs > stats.MaxLatencyMs {
@@ -665,7 +665,7 @@ func (bm *Benchmarker) Run() {
 
 	// Initialize per-worker stats
 	for i := 0; i < bm.cfg.NumSenders; i++ {
-		bm.workerStats[i] = &WorkerStats{ID: i}
+		bm.workerStats[i] = &WorkerStats{ID: i, MinLatencyMs: math.MaxInt64}
 	}
 
 	var wg sync.WaitGroup
