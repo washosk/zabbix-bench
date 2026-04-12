@@ -30,24 +30,25 @@ var Version = "1.3.4"
 const maxLatencySamples = 1_000_000
 
 type Config struct {
-	NumHosts       int    `yaml:"hosts"`
-	HostPrefix     string `yaml:"prefix"`
-	NumSenders     int    `yaml:"senders"`
-	Rate           int    `yaml:"rate"`
-	APIURL         string `yaml:"api_url"`
-	User           string `yaml:"user"`
-	Pass           string `yaml:"pass"`
-	APIKey         string `yaml:"api_key"`
-	TrapperAddr    string `yaml:"trapper_addr"`
-	GroupName      string `yaml:"group"`
-	Duration       time.Duration
-	SkipSetup      bool   `yaml:"skip_setup"`
-	KeepHosts      bool   `yaml:"keep_hosts"`
-	BatchHosts     int    `yaml:"batch_hosts"`
-	MaxBatchSize   int    `yaml:"max_batch_size"`   // Maximum total metrics per batch
-	PoolSize       int    `yaml:"pool_size"`        // TCP connection pool size
-	MetricsPerHost int    `yaml:"metrics_per_host"` // Number of metrics to send per host
-	OutputJSON     string // output file for JSON results
+	NumHosts       int           `yaml:"hosts"`
+	HostPrefix     string        `yaml:"prefix"`
+	NumSenders     int           `yaml:"senders"`
+	Rate           int           `yaml:"rate"`
+	APIURL         string        `yaml:"api_url"`
+	User           string        `yaml:"user"`
+	Pass           string        `yaml:"pass"`
+	APIKey         string        `yaml:"api_key"`
+	TrapperAddr    string        `yaml:"trapper_addr"`
+	GroupName      string        `yaml:"group"`
+	DurationStr    string        `yaml:"duration"` // e.g. "30s", "2m"
+	Duration       time.Duration `yaml:"-"`
+	SkipSetup      bool          `yaml:"skip_setup"`
+	KeepHosts      bool          `yaml:"keep_hosts"`
+	BatchHosts     int           `yaml:"batch_hosts"`
+	MaxBatchSize   int           `yaml:"max_batch_size"`   // Maximum total metrics per batch
+	PoolSize       int           `yaml:"pool_size"`        // TCP connection pool size
+	MetricsPerHost int           `yaml:"metrics_per_host"` // Number of metrics to send per host
+	OutputJSON     string        // output file for JSON results
 }
 
 type ValuePool struct {
@@ -88,23 +89,23 @@ type WorkerStats struct {
 }
 
 type BenchmarkResult struct {
-	Duration     float64       `json:"duration_seconds"`
-	HostsTested  int           `json:"hosts_tested"`
-	TotalBatches int64         `json:"total_batches"`
-	TotalValues  int64         `json:"total_values"`
-	PacketsSent  int64         `json:"packets_sent"`
-	ErrorCount   int64         `json:"error_count"`
-	ErrorRate    float64       `json:"error_rate_percent"`
-	Throughput   float64       `json:"throughput_vps"`
-	AvgLatencyMs int64         `json:"avg_latency_ms"`
-	MinLatencyMs int64         `json:"min_latency_ms"`
-	MaxLatencyMs int64         `json:"max_latency_ms"`
-	P50LatencyMs int64         `json:"p50_latency_ms"`
-	P95LatencyMs int64         `json:"p95_latency_ms"`
-	P99LatencyMs int64         `json:"p99_latency_ms"`
-	ErrorsByType ErrorCategory `json:"errors_by_type"`
-	WorkerStats  []WorkerStats `json:"worker_stats"`
-	Config       any           `json:"config"`
+	Duration       float64       `json:"duration_seconds"`
+	HostsTested    int           `json:"hosts_tested"`
+	TotalHostsSent int64         `json:"total_host_sends"`
+	TotalValues    int64         `json:"total_values"`
+	TotalPackets   int64         `json:"total_packets"`
+	ErrorCount     int64         `json:"error_count"`
+	ErrorRate      float64       `json:"error_rate_percent"`
+	Throughput     float64       `json:"throughput_vps"`
+	AvgLatencyMs   int64         `json:"avg_latency_ms"`
+	MinLatencyMs   int64         `json:"min_latency_ms"`
+	MaxLatencyMs   int64         `json:"max_latency_ms"`
+	P50LatencyMs   int64         `json:"p50_latency_ms"`
+	P95LatencyMs   int64         `json:"p95_latency_ms"`
+	P99LatencyMs   int64         `json:"p99_latency_ms"`
+	ErrorsByType   ErrorCategory `json:"errors_by_type"`
+	WorkerStats    []WorkerStats `json:"worker_stats"`
+	Config         any           `json:"config"`
 }
 
 type Benchmarker struct {
@@ -126,7 +127,7 @@ type Benchmarker struct {
 	workerMu    []sync.Mutex
 
 	// Global atomic counters
-	totalBatches   int64
+	totalHostsSent int64
 	totalPackets   int64
 	totalErrors    int64
 	totalLatencyMs int64
@@ -181,19 +182,15 @@ func (bm *Benchmarker) recordError(err error, workerID int) {
 
 	errStr := err.Error()
 	switch {
-	case contains(errStr, "timeout") || contains(errStr, "Timeout"):
+	case strings.Contains(errStr, "timeout") || strings.Contains(errStr, "Timeout"):
 		atomic.AddInt64(&bm.errorTimeout, 1)
-	case contains(errStr, "closed") || contains(errStr, "EOF"):
+	case strings.Contains(errStr, "closed") || strings.Contains(errStr, "EOF"):
 		atomic.AddInt64(&bm.errorClosed, 1)
-	case contains(errStr, "connection") || contains(errStr, "network"):
+	case strings.Contains(errStr, "connection") || strings.Contains(errStr, "network"):
 		atomic.AddInt64(&bm.errorNetwork, 1)
 	default:
 		atomic.AddInt64(&bm.errorOther, 1)
 	}
-}
-
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
 }
 
 func (bm *Benchmarker) sortLatencies() {
@@ -227,8 +224,8 @@ func (bm *Benchmarker) stopped() bool {
 	}
 }
 
-func loadConfigFile(path string) (Config, error) {
-	cfg := Config{
+func defaultConfig() Config {
+	return Config{
 		NumHosts:       10,
 		HostPrefix:     "bench-",
 		NumSenders:     10,
@@ -243,6 +240,10 @@ func loadConfigFile(path string) (Config, error) {
 		PoolSize:       0,
 		MetricsPerHost: 6,
 	}
+}
+
+func loadConfigFile(path string) (Config, error) {
+	cfg := defaultConfig()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -253,26 +254,19 @@ func loadConfigFile(path string) (Config, error) {
 		return cfg, err
 	}
 
+	if cfg.DurationStr != "" {
+		d, err := time.ParseDuration(cfg.DurationStr)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid duration %q: %v", cfg.DurationStr, err)
+		}
+		cfg.Duration = d
+	}
+
 	return cfg, nil
 }
 
 func main() {
-	// Defaults
-	cfg := Config{
-		NumHosts:       10,
-		HostPrefix:     "bench-",
-		NumSenders:     10,
-		Rate:           0,
-		APIURL:         "http://localhost/zabbix/api_jsonrpc.php",
-		User:           "Admin",
-		Pass:           "",
-		TrapperAddr:    "",
-		GroupName:      "Benchmark-Group",
-		BatchHosts:     50,
-		MaxBatchSize:   5000,
-		PoolSize:       0,
-		MetricsPerHost: 6,
-	}
+	cfg := defaultConfig()
 
 	// First pass: just grab -config path
 	var cfgFile string
@@ -366,6 +360,9 @@ func main() {
 		if !explicitFlags["metrics-per-host"] {
 			cfg.MetricsPerHost = fileCfg.MetricsPerHost
 		}
+		if !explicitFlags["duration"] && fileCfg.Duration > 0 {
+			cfg.Duration = fileCfg.Duration
+		}
 	}
 
 	cfg.OutputJSON = outputJSON
@@ -406,6 +403,12 @@ func main() {
 	}
 	if cfg.NumSenders <= 0 {
 		log.Fatalf("-senders must be > 0")
+	}
+	if cfg.NumHosts <= 0 {
+		log.Fatalf("-hosts must be > 0")
+	}
+	if cfg.MetricsPerHost <= 0 {
+		log.Fatalf("-metrics-per-host must be > 0")
 	}
 
 	bm := &Benchmarker{
@@ -540,64 +543,69 @@ func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
 		return err
 	}
 
-	for {
-		if err = conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
-			conn.Close()
-			return fmt.Errorf("set deadline error: %v", err)
-		}
+	if err = conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
+		conn.Close()
+		return fmt.Errorf("set deadline error: %v", err)
+	}
 
-		_, err = conn.Write(buffer)
-		if err != nil {
-			conn.Close()
-			if isPooled {
-				// Retry once with a new connection if the pooled one was stale
-				conn, _, err = s.getConn()
-				if err != nil {
-					return err
-				}
-				isPooled = false
-				continue
+	_, err = conn.Write(buffer)
+	if err != nil {
+		conn.Close()
+		if isPooled {
+			// Retry once with a new connection if the pooled one was stale
+			var dialErr error
+			conn, _, dialErr = s.getConn()
+			if dialErr != nil {
+				return dialErr
 			}
+			if dialErr = conn.SetDeadline(time.Now().Add(s.timeout)); dialErr != nil {
+				conn.Close()
+				return fmt.Errorf("set deadline error: %v", dialErr)
+			}
+			if _, dialErr = conn.Write(buffer); dialErr != nil {
+				conn.Close()
+				return fmt.Errorf("write error: %v", dialErr)
+			}
+		} else {
 			return fmt.Errorf("write error: %v", err)
 		}
-
-		header := make([]byte, 13)
-		_, err = io.ReadFull(conn, header)
-		if err != nil {
-			conn.Close()
-			if isPooled {
-				// Retry once
-				conn, _, err = s.getConn()
-				if err != nil {
-					return err
-				}
-				isPooled = false
-				continue
-			}
-			return fmt.Errorf("read header error: %v", err)
-		}
-
-		if !bytes.Equal(header[:5], []byte("ZBXD\x01")) {
-			conn.Close()
-			return fmt.Errorf("invalid header")
-		}
-
-		dataLen := binary.LittleEndian.Uint64(header[5:13])
-		if dataLen > 100*1024*1024 {
-			conn.Close()
-			return fmt.Errorf("response too large")
-		}
-
-		data := make([]byte, dataLen)
-		_, err = io.ReadFull(conn, data)
-		if err != nil {
-			conn.Close()
-			return fmt.Errorf("read data error: %v", err)
-		}
-
-		s.putConn(conn)
-		return nil
 	}
+
+	// Data was written — do not retry from here to avoid double-sends.
+	header := make([]byte, 13)
+	_, err = io.ReadFull(conn, header)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("read header error: %v", err)
+	}
+
+	if !bytes.Equal(header[:5], []byte("ZBXD\x01")) {
+		conn.Close()
+		return fmt.Errorf("invalid header")
+	}
+
+	dataLen := binary.LittleEndian.Uint64(header[5:13])
+	if dataLen > 100*1024*1024 {
+		conn.Close()
+		return fmt.Errorf("response too large")
+	}
+
+	data := make([]byte, dataLen)
+	_, err = io.ReadFull(conn, data)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("read data error: %v", err)
+	}
+
+	// Check Zabbix response for server-side failures
+	var resp zabbix.Response
+	if jsonErr := json.Unmarshal(data, &resp); jsonErr == nil && resp.Response != "success" {
+		conn.Close()
+		return fmt.Errorf("zabbix rejected data: %s", resp.Info)
+	}
+
+	s.putConn(conn)
+	return nil
 }
 
 func (bm *Benchmarker) login() error {
@@ -671,10 +679,34 @@ func (bm *Benchmarker) loadExistingHosts() error {
 		return err
 	}
 
-	for i := 0; i < bm.cfg.NumHosts; i++ {
-		bm.hostNames = append(bm.hostNames, fmt.Sprintf("%s%04d", bm.cfg.HostPrefix, i+1))
+	// Look up the host group so cleanup can find it later
+	groups, err := bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": bm.cfg.GroupName}})
+	if err == nil && len(groups) > 0 {
+		bm.groupID = groups[0].GroupID
+		log.Printf("Found Host Group: %s (ID: %s)", bm.cfg.GroupName, bm.groupID)
+	} else {
+		log.Printf("Warning: Host Group '%s' not found; cleanup will be skipped.", bm.cfg.GroupName)
 	}
-	log.Printf("Loaded %d host names (no API verification).", len(bm.hostNames))
+
+	for i := 0; i < bm.cfg.NumHosts; i++ {
+		name := fmt.Sprintf("%s%04d", bm.cfg.HostPrefix, i+1)
+		bm.hostNames = append(bm.hostNames, name)
+	}
+
+	// Look up host IDs for cleanup
+	if bm.groupID != "" {
+		hosts, err := bm.api.HostsGet(zabbixapi.Params{
+			"groupids": []string{bm.groupID},
+			"output":   []string{"hostid"},
+		})
+		if err == nil {
+			for _, h := range hosts {
+				bm.hostIDs = append(bm.hostIDs, h.HostID)
+			}
+		}
+	}
+
+	log.Printf("Loaded %d host names (%d host IDs from API).", len(bm.hostNames), len(bm.hostIDs))
 	return nil
 }
 
@@ -714,13 +746,13 @@ func (bm *Benchmarker) Run() {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
-		lastBatches := int64(0)
+		lastHostsSent := int64(0)
 		for {
 			select {
 			case <-bm.done:
 				return
 			case <-ticker.C:
-				batches := atomic.LoadInt64(&bm.totalBatches)
+				hostsSent := atomic.LoadInt64(&bm.totalHostsSent)
 				packets := atomic.LoadInt64(&bm.totalPackets)
 				errs := atomic.LoadInt64(&bm.totalErrors)
 				elapsed := time.Since(bm.startTime).Seconds()
@@ -728,15 +760,15 @@ func (bm *Benchmarker) Run() {
 					elapsed = 0.001
 				}
 				mph := int64(bm.cfg.MetricsPerHost)
-				vps := float64(batches*mph) / elapsed
-				intervalVPS := float64((batches-lastBatches)*mph) / 5.0
-				lastBatches = batches
+				vps := float64(hostsSent*mph) / elapsed
+				intervalVPS := float64((hostsSent-lastHostsSent)*mph) / 5.0
+				lastHostsSent = hostsSent
 				errRate := 0.0
 				if packets+errs > 0 {
 					errRate = float64(errs) / float64(packets+errs) * 100
 				}
-				log.Printf("[%6.0fs] %8d batches | %10.2f VPS (inst: %.2f) | errors: %d (%.1f%%)",
-					elapsed, batches, vps, intervalVPS, errs, errRate)
+				log.Printf("[%6.0fs] %8d hosts | %6d pkts | %10.2f VPS (inst: %.2f) | errors: %d (%.1f%%)",
+					elapsed, hostsSent, packets, vps, intervalVPS, errs, errRate)
 			}
 		}
 	}()
@@ -750,9 +782,6 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 
 	sendBatch := func(hostSlice []string) {
 		metricsPerHost := bm.cfg.MetricsPerHost
-		if metricsPerHost <= 0 {
-			metricsPerHost = 6
-		}
 		metrics := make([]*zabbix.Metric, 0, len(hostSlice)*metricsPerHost)
 
 		metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
@@ -802,7 +831,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		latency := time.Since(t0).Milliseconds()
 
 		if err == nil {
-			atomic.AddInt64(&bm.totalBatches, int64(len(hostSlice)))
+			atomic.AddInt64(&bm.totalHostsSent, int64(len(hostSlice)))
 			atomic.AddInt64(&bm.totalPackets, 1)
 			bm.recordLatency(latency, workerID)
 
@@ -816,9 +845,9 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	}
 
 	batchSize := bm.cfg.BatchHosts
-	if bm.cfg.MaxBatchSize > 0 && bm.cfg.MetricsPerHost > 0 {
+	if bm.cfg.MaxBatchSize > 0 {
 		hostsFit := bm.cfg.MaxBatchSize / bm.cfg.MetricsPerHost
-		if hostsFit > 0 {
+		if hostsFit > 0 && hostsFit < batchSize {
 			batchSize = hostsFit
 		}
 	}
@@ -867,12 +896,12 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	bm.latenciesMu.Lock()
 	defer bm.latenciesMu.Unlock()
 
-	batches := atomic.LoadInt64(&bm.totalBatches)
+	hostsSent := atomic.LoadInt64(&bm.totalHostsSent)
 	packets := atomic.LoadInt64(&bm.totalPackets)
 	errs := atomic.LoadInt64(&bm.totalErrors)
 	latTotal := atomic.LoadInt64(&bm.totalLatencyMs)
 	mph := int64(bm.cfg.MetricsPerHost)
-	values := batches * mph
+	values := hostsSent * mph
 
 	bm.sortLatencies()
 	var minLat, maxLat int64
@@ -905,20 +934,20 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 		elapsed = 0.001
 	}
 	return BenchmarkResult{
-		Duration:     elapsed,
-		HostsTested:  len(bm.hostNames),
-		TotalBatches: batches,
-		TotalValues:  values,
-		PacketsSent:  packets,
-		ErrorCount:   errs,
-		ErrorRate:    errRate,
-		Throughput:   float64(values) / elapsed,
-		AvgLatencyMs: avgLatency,
-		MinLatencyMs: minLat,
-		MaxLatencyMs: maxLat,
-		P50LatencyMs: bm.calculatePercentile(50),
-		P95LatencyMs: bm.calculatePercentile(95),
-		P99LatencyMs: bm.calculatePercentile(99),
+		Duration:       elapsed,
+		HostsTested:    len(bm.hostNames),
+		TotalHostsSent: hostsSent,
+		TotalValues:    values,
+		TotalPackets:   packets,
+		ErrorCount:     errs,
+		ErrorRate:      errRate,
+		Throughput:     float64(values) / elapsed,
+		AvgLatencyMs:   avgLatency,
+		MinLatencyMs:   minLat,
+		MaxLatencyMs:   maxLat,
+		P50LatencyMs:   bm.calculatePercentile(50),
+		P95LatencyMs:   bm.calculatePercentile(95),
+		P99LatencyMs:   bm.calculatePercentile(99),
 		ErrorsByType: ErrorCategory{
 			Timeout: int(atomic.LoadInt64(&bm.errorTimeout)),
 			Closed:  int(atomic.LoadInt64(&bm.errorClosed)),
@@ -939,46 +968,51 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 }
 
 func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) {
+	// boxLine prints a line that fits exactly inside the 57-char inner width.
+	boxLine := func(content string) {
+		fmt.Printf("║ %-56s║\n", content)
+	}
+
 	fmt.Println()
-	fmt.Println("╔════════════════════════════════════════════════════════╗")
-	fmt.Println("║           BENCHMARK SUMMARY REPORT                    ║")
-	fmt.Println("╠════════════════════════════════════════════════════════╣")
-	fmt.Printf("║  Hosts tested:        %-35d║\n", result.HostsTested)
-	fmt.Printf("║  Total batches:       %-35d║\n", result.TotalBatches)
-	fmt.Printf("║  Total values:        %-35d║\n", result.TotalValues)
-	fmt.Printf("║  Packets sent:        %-35d║\n", result.PacketsSent)
-	fmt.Printf("║  Errors:              %-18d(%.1f%%)║\n", result.ErrorCount, result.ErrorRate)
-	fmt.Println("╠════════════════════════════════════════════════════════╣")
-	fmt.Printf("║  Throughput (VPS):    %-35.2f║\n", result.Throughput)
-	fmt.Printf("║  Avg latency:         %-30dms║\n", result.AvgLatencyMs)
-	fmt.Printf("║  Min latency:         %-30dms║\n", result.MinLatencyMs)
-	fmt.Printf("║  Max latency:         %-30dms║\n", result.MaxLatencyMs)
-	fmt.Printf("║  P50 latency:         %-30dms║\n", result.P50LatencyMs)
-	fmt.Printf("║  P95 latency:         %-30dms║\n", result.P95LatencyMs)
-	fmt.Printf("║  P99 latency:         %-30dms║\n", result.P99LatencyMs)
-	fmt.Println("╠════════════════════════════════════════════════════════╣")
+	fmt.Println("╔═════════════════════════════════════════════════════════╗")
+	boxLine("              BENCHMARK SUMMARY REPORT")
+	fmt.Println("╠═════════════════════════════════════════════════════════╣")
+	boxLine(fmt.Sprintf("Hosts tested:        %d", result.HostsTested))
+	boxLine(fmt.Sprintf("Total host sends:    %d", result.TotalHostsSent))
+	boxLine(fmt.Sprintf("Total values:        %d", result.TotalValues))
+	boxLine(fmt.Sprintf("Total packets:       %d", result.TotalPackets))
+	boxLine(fmt.Sprintf("Errors:              %d (%.1f%%)", result.ErrorCount, result.ErrorRate))
+	fmt.Println("╠═════════════════════════════════════════════════════════╣")
+	boxLine(fmt.Sprintf("Throughput (VPS):    %.2f", result.Throughput))
+	boxLine(fmt.Sprintf("Avg latency:         %d ms", result.AvgLatencyMs))
+	boxLine(fmt.Sprintf("Min latency:         %d ms", result.MinLatencyMs))
+	boxLine(fmt.Sprintf("Max latency:         %d ms", result.MaxLatencyMs))
+	boxLine(fmt.Sprintf("P50 latency:         %d ms", result.P50LatencyMs))
+	boxLine(fmt.Sprintf("P95 latency:         %d ms", result.P95LatencyMs))
+	boxLine(fmt.Sprintf("P99 latency:         %d ms", result.P99LatencyMs))
+	fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	if result.ErrorsByType.Total > 0 {
-		fmt.Printf("║  Error breakdown:                                      ║\n")
-		fmt.Printf("║    Timeout:           %-35d║\n", result.ErrorsByType.Timeout)
-		fmt.Printf("║    Connection closed: %-35d║\n", result.ErrorsByType.Closed)
-		fmt.Printf("║    Network error:     %-35d║\n", result.ErrorsByType.Network)
-		fmt.Printf("║    Other:             %-35d║\n", result.ErrorsByType.Other)
-		fmt.Println("╠════════════════════════════════════════════════════════╣")
+		boxLine("Error breakdown:")
+		boxLine(fmt.Sprintf("  Timeout:           %d", result.ErrorsByType.Timeout))
+		boxLine(fmt.Sprintf("  Connection closed: %d", result.ErrorsByType.Closed))
+		boxLine(fmt.Sprintf("  Network error:     %d", result.ErrorsByType.Network))
+		boxLine(fmt.Sprintf("  Other:             %d", result.ErrorsByType.Other))
+		fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	}
 
 	if len(result.WorkerStats) > 0 {
-		fmt.Println("║  Per-worker statistics:                                ║")
+		boxLine("Per-worker statistics:")
 		for _, ws := range result.WorkerStats {
 			if ws.PacketsSent > 0 {
 				workerVPS := float64(ws.HostsSent*int64(metricsPerHost)) / result.Duration
-				fmt.Printf("║    Worker %d: %d packets, %d hosts, %d errors, %.0f VPS║\n",
-					ws.ID, ws.PacketsSent, ws.HostsSent, ws.ErrorCount, workerVPS)
+				boxLine(fmt.Sprintf("  W%d: %d pkts, %d hosts, %d err, %.0f VPS",
+					ws.ID, ws.PacketsSent, ws.HostsSent, ws.ErrorCount, workerVPS))
 			}
 		}
-		fmt.Println("╠════════════════════════════════════════════════════════╣")
+		fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	}
 
-	fmt.Println("╚════════════════════════════════════════════════════════╝")
+	fmt.Println("╚═════════════════════════════════════════════════════════╝")
 }
 
 func (bm *Benchmarker) ExportJSON(result BenchmarkResult) {
