@@ -23,7 +23,7 @@ File: `Formula/zabbix-bench.rb`
 class ZabbixBench < Formula
   desc "High-performance Zabbix NVPS benchmark tool"
   homepage "https://github.com/washosk/zabbix-bench"
-  url "https://github.com/washosk/zabbix-bench/releases/download/v1.3.4/zabbix-bench-linux-amd64"
+  url "https://github.com/washosk/zabbix-bench/releases/download/v1.4.0/zabbix-bench-linux-amd64"
   sha256 "$(sha256sum zabbix-bench | cut -d' ' -f1)"
   license "MIT"
 
@@ -66,7 +66,7 @@ brew install zabbix-bench
 
 ### Step 1: Create AUR account
 
-- Visit https://aur.archlinux.org/account-edit/
+- Visit <https://aur.archlinux.org/account-edit/>
 - Create SSH key for AUR access
 
 ### Step 2: Clone AUR repository
@@ -164,9 +164,9 @@ ENTRYPOINT ["zabbix-bench"]
 
 ```bash
 docker build -t washosk/zabbix-bench:latest .
-docker tag washosk/zabbix-bench:latest washosk/zabbix-bench:v1.3.4
+docker tag washosk/zabbix-bench:latest washosk/zabbix-bench:v1.4.0
 docker push washosk/zabbix-bench:latest
-docker push washosk/zabbix-bench:v1.3.4
+docker push washosk/zabbix-bench:v1.4.0
 ```
 
 ### Step 3: Create docker-compose example

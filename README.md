@@ -16,7 +16,6 @@ It handles the complete lifecycle of a stress test:
 - 6 metric types cycled per host: Boolean, Unsigned, Float, Text, Character, Log
 - Flood mode (`-rate 0`) sends metrics as fast as possible with no artificial delay
 - Bulk Trapper packets pack multiple hosts per packet to maximize throughput
-- TCP connection pool (`-pool-size`) for persistent connections with stale connection auto-retry
 - Metric-based batching (`-batch-metrics`) to cap payload size independently of host count
 - Pre-generated value pool eliminates `rand` overhead in the hot loop
 - Per-worker atomic latency and error tracking with minimal lock contention
@@ -24,8 +23,9 @@ It handles the complete lifecycle of a stress test:
 - Latency percentiles (P50, P95, P99) for detailed performance analysis
 - Per-worker statistics for identifying bottlenecks
 - Error categorization (timeout, connection closed, network, other)
+- Zabbix Trapper response validation (detects server-side rejections)
 - JSON output export for analysis and CI/CD integration
-- YAML configuration file support for complex setups
+- YAML configuration file support with duration string parsing (`duration: "30s"`)
 - Auto-detection of Trapper address from API URL
 - Duration flag for automatic time-limited runs
 - Graceful shutdown on Ctrl+C or SIGTERM with full cleanup
@@ -77,7 +77,7 @@ go build -o zabbix-bench main.go
 
 ## Usage
 
-```
+```text
 ./zabbix-bench [flags]
 
 Flags:
@@ -91,15 +91,16 @@ Flags:
   -senders          int       Number of concurrent sender goroutines (default 10)
   -rate             int       Batches per second per host; 0 = flood mode (default 0)
   -batch-hosts      int       Hosts per bulk Trapper packet (default 50)
-  -batch-metrics    int       Maximum metrics per packet; overrides -batch-hosts when set (default 5000)
+  -batch-metrics    int       Max metrics per packet; constrains -batch-hosts when smaller (default 5000)
   -metrics-per-host int       Number of metrics to send per host (default 6)
-  -pool-size        int       TCP connection pool size; 0 = disabled, one connection per send (default 0)
   -duration         duration  Benchmark duration e.g. 30s, 2m (0 = run until Ctrl+C)
   -skip-setup       bool      Skip host/item creation, use hosts that already exist
   -keep-hosts       bool      Skip cleanup after test; keep hosts in Zabbix
   -group            string    Host Group name (default "Benchmark-Group")
   -config           string    YAML configuration file (CLI flags override config file values)
   -output-json      string    Export results as JSON to file
+  -version          bool      Print release version and exit
+  -v                bool      Print release version and exit (short form)
 ```
 
 ### Environment variables
@@ -107,7 +108,7 @@ Flags:
 | Variable         | Description                                                                                          |
 |------------------|------------------------------------------------------------------------------------------------------|
 | `ZABBIX_API_KEY` | Zabbix API token (Zabbix 5.4+). When set, skips `user.login` entirely.                               |
-| `ZABBIX_PASS`    | Zabbix password. Used when `-pass` is not provided. Avoids exposing credentials in the process list.  |
+| `ZABBIX_PASS`    | Zabbix password. Used when `-pass` is not provided. Avoids exposing credentials in the process list. |
 
 ---
 
@@ -170,6 +171,7 @@ user: "Admin"
 pass: "zabbix"
 batch_hosts: 50
 group: "LoadTest"
+duration: "2m"
 skip_setup: false
 keep_hosts: false
 ```
@@ -291,6 +293,7 @@ All items use Zabbix Trapper type (type=2), meaning they only accept pushed data
 | Goal                     | Action                                                        |
 |--------------------------|---------------------------------------------------------------|
 | Max raw VPS              | Increase `-senders`, `-batch-hosts`, and `-metrics-per-host`  |
+| Cap payload size         | Use `-batch-metrics` to limit metrics per packet              |
 | Find DB bottleneck       | Watch Zabbix internal queue via `zabbix_server -R diaginfo`   |
 | Reduce setup time        | Lower `-hosts` or use `-skip-setup` on repeat runs            |
 | Keep data for inspection | Add `-keep-hosts` flag                                        |
@@ -303,52 +306,55 @@ Use Ctrl+C or `kill <pid>` (SIGTERM) to stop. The tool cleans up hosts automatic
 
 ## Example benchmark results
 
-Results from an Intel i7-1260P (16 threads), 46 GB DDR5, running Zabbix 7.0 on Docker with TimescaleDB (pg16).
+Results from a Zabbix 7.0 instance on Docker (localhost:8080) with TimescaleDB.
 
-### Default config (6 metrics per host, 50 hosts, 20 senders, 1 minute)
+### 30-second test (10 hosts, 4 senders, flood mode)
 
 ```text
-Hosts: 50 | Senders: 20 | Batch: 50 | Flood: true | Duration: 1m0s
+Hosts: 10 | Senders: 4 | Batch: 50 | Flood: true | Duration: 30s
 
-Throughput (VPS):    182,258
-Avg latency:         2ms
-P50 latency:         2ms
-P95 latency:         4ms
-P99 latency:         6ms
-Total values:        10,939,980
+╔═════════════════════════════════════════════════════════╗
+║               BENCHMARK SUMMARY REPORT                  ║
+╠═════════════════════════════════════════════════════════╣
+║ Hosts tested:        10                                 ║
+║ Total host sends:    327161                             ║
+║ Total values:        1962966                            ║
+║ Total packets:       137121                             ║
+║ Errors:              0 (0.0%)                           ║
+╠═════════════════════════════════════════════════════════╣
+║ Throughput (VPS):    63501.22                           ║
+║ Avg latency:         0 ms                               ║
+║ Min latency:         0 ms                               ║
+║ Max latency:         1001 ms                            ║
+║ P50 latency:         0 ms                               ║
+║ P95 latency:         0 ms                               ║
+║ P99 latency:         1 ms                               ║
+╠═════════════════════════════════════════════════════════╣
+║ Per-worker statistics:                                  ║
+║   W0: 31638 pkts, 94914 hosts, 0 err, 18423 VPS         ║
+║   W1: 31708 pkts, 95124 hosts, 0 err, 18463 VPS         ║
+║   W2: 31674 pkts, 95022 hosts, 0 err, 18444 VPS         ║
+║   W3: 42101 pkts, 42101 hosts, 0 err, 8172 VPS          ║
+╠═════════════════════════════════════════════════════════╣
+╚═════════════════════════════════════════════════════════╝
+```
+
+### 5-minute stress test (100 hosts, 200 senders, 600 metrics/host)
+
+```text
+Hosts: 100 | Senders: 200 | Metrics/host: 600 | Flood: true | Duration: 5m
+
+Sustained VPS:       115,843
+Peak VPS:            566,020
+Total values:        34,819,200
+Total packets:       58,032
+P50 latency:         246 ms
+P95 latency:         1,413 ms
+P99 latency:         1,667 ms
 Errors:              0 (0.0%)
 ```
 
-### High-volume test (500 metrics per host, 100 hosts, 200 senders)
-
-Tested against an AWS t3.large instance running Zabbix 7.0:
-
-```text
-Hosts: 100 | Senders: 200 | Batch: 100 | Metrics/host: 500 | Flood: true
-
-Throughput (VPS):    ~1,700 (sustained)
-Avg latency:         419ms
-P50 latency:         206ms
-P95 latency:         1,292ms
-P99 latency:         2,260ms
-Errors:              3 timeouts (0.0%)
-```
-
-With 500 metrics per host, the database becomes the bottleneck. This is useful for testing Zabbix server tuning and database write performance.
-
-### 10-minute sustained test (50 hosts, 20 senders, 6 metrics)
-
-```text
-Duration:            10 minutes
-Sustained VPS:       54,178
-Peak VPS:            266,828
-Total values:        32,500,000
-Packets sent:        1,800,000
-Errors:              0 (0.0%)
-P99 latency:         5ms
-```
-
-Initial burst reaches 266k VPS, stabilizes around 54k sustained. Tight latency percentiles (P99 = 5ms) show consistent performance. Zero errors across 1.8M packets.
+With 600 metrics per host (60,000 metrics per batch), the database becomes the bottleneck. Initial burst hits 566k VPS, then stabilizes around 115k sustained as the server catches up. All 100 workers distributed load evenly (~580 packets each). Zero errors across the full 5-minute run.
 
 ### Bottlenecks found via Zabbix internal API
 

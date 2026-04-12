@@ -70,6 +70,7 @@ go install github.com/washosk/zabbix-bench@latest
 ```
 
 **Output:**
+
 - Console: Real-time progress and summary
 - Creates 10 temporary hosts
 - Sends metrics via Trapper
@@ -86,6 +87,7 @@ go install github.com/washosk/zabbix-bench@latest
 ```
 
 **What it does:**
+
 - Creates 50 test hosts
 - Uses 20 concurrent senders
 - Batches 50 hosts per packet
@@ -129,6 +131,7 @@ senders: 20
 batch_hosts: 50
 trapper_addr: "127.0.0.1:10051"
 group: "LoadTest"
+duration: "2m"
 ```
 
 Run with:
@@ -141,52 +144,58 @@ Run with:
 
 ## Understanding Output
 
-### Console output example:
+### Console output example
 
-```
-╔════════════════════════════════════════════════════════╗
-║           BENCHMARK SUMMARY REPORT                    ║
-╠════════════════════════════════════════════════════════╣
-║  Hosts tested:        50                                 ║
-║  Total batches:       5417897                            ║
-║  Total values:        32507382                           ║
-║  Packets sent:        1846051                            ║
-║  Errors:              0                 (0.0%)║
-╠════════════════════════════════════════════════════════╣
-║  Throughput (VPS):    54178.39                          ║
-║  Avg latency:         5                             ms║
-║  Min latency:         0                             ms║
-║  Max latency:         1007                          ms║
-║  P50 latency:         1                             ms║
-║  P95 latency:         3                             ms║
-║  P99 latency:         5                             ms║
-╚════════════════════════════════════════════════════════╝
+```text
+╔═════════════════════════════════════════════════════════╗
+║               BENCHMARK SUMMARY REPORT                  ║
+╠═════════════════════════════════════════════════════════╣
+║ Hosts tested:        10                                 ║
+║ Total host sends:    327161                             ║
+║ Total values:        1962966                            ║
+║ Total packets:       137121                             ║
+║ Errors:              0 (0.0%)                           ║
+╠═════════════════════════════════════════════════════════╣
+║ Throughput (VPS):    63501.22                           ║
+║ Avg latency:         0 ms                               ║
+║ Min latency:         0 ms                               ║
+║ Max latency:         1001 ms                            ║
+║ P50 latency:         0 ms                               ║
+║ P95 latency:         0 ms                               ║
+║ P99 latency:         1 ms                               ║
+╠═════════════════════════════════════════════════════════╣
+║ Per-worker statistics:                                  ║
+║   W0: 31638 pkts, 94914 hosts, 0 err, 18423 VPS         ║
+║   W1: 31708 pkts, 95124 hosts, 0 err, 18463 VPS         ║
+╠═════════════════════════════════════════════════════════╣
+╚═════════════════════════════════════════════════════════╝
 ```
 
 **What it means:**
+
 - **VPS**: Values per second sent
 - **Latency**: Response time from Zabbix Trapper
-- **P50/P95/P99**: Percentiles (50% of packets ≤ P50ms, etc.)
+- **P50/P95/P99**: Percentiles (50% of packets at or below P50ms, etc.)
 - **Worker stats**: Individual sender goroutine performance
 
-### JSON output example:
+### JSON output example
 
 ```json
 {
-  "duration_seconds": 30.05,
-  "hosts_tested": 50,
-  "total_batches": 5417897,
-  "total_values": 32507382,
-  "packets_sent": 1846051,
+  "duration_seconds": 30.91,
+  "hosts_tested": 10,
+  "total_host_sends": 327161,
+  "total_values": 1962966,
+  "total_packets": 137121,
   "error_count": 0,
-  "error_rate_percent": 0.0,
-  "throughput_vps": 54178.39,
-  "avg_latency_ms": 5,
+  "error_rate_percent": 0,
+  "throughput_vps": 63501.22,
+  "avg_latency_ms": 0,
   "min_latency_ms": 0,
-  "max_latency_ms": 1007,
-  "p50_latency_ms": 1,
-  "p95_latency_ms": 3,
-  "p99_latency_ms": 5,
+  "max_latency_ms": 1001,
+  "p50_latency_ms": 0,
+  "p95_latency_ms": 0,
+  "p99_latency_ms": 1,
   "errors_by_type": {
     "timeout": 0,
     "closed": 0,
@@ -197,21 +206,21 @@ Run with:
   "worker_stats": [
     {
       "worker_id": 0,
-      "packets_sent": 92302,
-      "hosts_sent": 2500,
+      "packets_sent": 31638,
+      "hosts_sent": 94914,
       "errors": 0,
-      "total_latency_ms": 461510,
-      "min_latency_ms": 1,
-      "max_latency_ms": 150,
-      "avg_latency_ms": 5
+      "total_latency_ms": 17941,
+      "min_latency_ms": 0,
+      "max_latency_ms": 1001,
+      "avg_latency_ms": 0
     }
   ],
   "config": {
     "batch_hosts": 50,
-    "hosts": 50,
+    "hosts": 10,
     "metrics_per_host": 6,
     "rate": 0,
-    "senders": 20,
+    "senders": 4,
     "trapper_addr": "127.0.0.1:10051"
   }
 }
@@ -285,33 +294,36 @@ export ZABBIX_API_KEY="your-token-here"
 
 ### Connection refused
 
-```
+```text
 Error: dial tcp 127.0.0.1:10051: connect: connection refused
 ```
 
 **Solution:**
+
 - Verify Zabbix is running: `curl http://localhost/zabbix/`
 - Check Trapper port: `telnet localhost 10051`
 - Verify firewall allows port 10051
 
 ### Authentication failed
 
-```
+```text
 Error logging into Zabbix API: invalid username or password
 ```
 
 **Solution:**
+
 - Verify credentials: `Admin` / `zabbix`
 - Check API URL ends with `api_jsonrpc.php`
 - Try API token instead: `-api-key "token-here"`
 
 ### High error rate
 
-```
+```text
 Errors: 1234 (5.3%)
 ```
 
 **Solution:**
+
 - Reduce load: fewer hosts or senders
 - Increase rate limit: `-rate 1000` instead of `-rate 0`
 - Check Zabbix logs for capacity issues
@@ -319,11 +331,12 @@ Errors: 1234 (5.3%)
 
 ### Out of memory
 
-```
+```text
 panic: runtime error: memory allocation failed
 ```
 
 **Solution:**
+
 - Reduce number of hosts/senders
 - Use shorter duration
 - Check system resources: `free -h`, `top`
@@ -373,4 +386,4 @@ panic: runtime error: memory allocation failed
 - Check existing documentation
 - Review example configurations
 
-Happy benchmarking! 🚀
+Happy benchmarking.

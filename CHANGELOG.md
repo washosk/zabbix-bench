@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-04-12
+
+### Added
+
+- **YAML Duration Parsing**: Config files now accept Go duration strings (e.g. `duration: "30s"`, `duration: "2m"`). Previously duration was CLI-only.
+- **Input Validation**: `-hosts` and `-metrics-per-host` are now validated on startup. Zero or negative values exit with a clear error instead of producing empty results.
+- **Zabbix Response Validation**: The Trapper sender now parses response bodies and reports an error when Zabbix rejects data, instead of silently counting rejections as successes.
+- **`--skip-setup` Cleanup Support**: When using `--skip-setup`, the tool now queries the API for the host group and host IDs so that cleanup works correctly without `--keep-hosts`.
+
+### Changed
+
+- **Counter Naming**: Internal counters and JSON output fields renamed for clarity. `total_batches` is now `total_host_sends` (counts host-sends, not packets). `packets_sent` is now `total_packets`. Progress log and summary report labels updated to match.
+- **Batch Size Logic**: `-batch-metrics` now constrains `-batch-hosts` (uses the smaller of the two) instead of silently replacing it.
+- **Summary Report**: Rewrote the box-drawing output to use a helper that pads every line to the same width. All lines now align correctly regardless of value length.
+- **Config Defaults**: Extracted into a single `defaultConfig()` function, eliminating a duplicated block between `loadConfigFile()` and `main()`.
+
+### Removed
+
+- **TCP Connection Pool (`-pool-size`)**: Removed entirely. Zabbix Trapper closes connections after each response, making pooled connections stale on reuse. This caused 50% error rates when enabled. Each send now uses a fresh connection with `defer conn.Close()` for clean resource handling.
+- **Redundant `contains()` wrapper**: Inlined `strings.Contains` at call sites.
+
+### Fixed
+
+- **Retry Double-Send**: The old pooled sender could retry a write after data was already sent, causing duplicate metrics. The new sender uses one connection per request with no retry ambiguity.
+- **`MetricsPerHost=0` Mismatch**: The worker defaulted to 6 metrics internally while `GenerateResult` used the raw config value (0), producing zero throughput in reports. Now validated at startup.
+
+---
+
 ## [1.3.4] - 2026-04-11
 
 ### Fixed
@@ -34,9 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Connection Pooling**: Native TCP connection reuse via `-pool-size` flag to eliminate socket handshake overhead.
 - **Metric-based Batching**: Introduced `-batch-metrics` to decouple batching from host count, allowing high-density payloads.
-- **Stale Connection Recovery**: Implemented auto-retry logic in the pooled sender to handle asynchronous server-side TCP drops.
+- **Connection Pooling** (removed in 1.4.0): Added `-pool-size` flag for TCP connection reuse. Later found incompatible with Zabbix Trapper's per-request connection model.
 
 ---
 
@@ -240,10 +267,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Upcoming
 
-### [1.1.0] - Planned
+### Planned
 
 - Custom item type configuration
-- Connection pooling for Trapper sender
 - Histogram/bucket latency tracking
 - Warmup phase option
 - Comparison mode between benchmark runs
@@ -293,9 +319,10 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 1.4.0 | 2026-04-12 | Stable | Remove pool, add validation, fix naming, YAML duration |
 | 1.3.4 | 2026-04-11 | Stable | Performance and stability fixes |
 | 1.3.3 | 2026-04-11 | Stable | Bug fixes |
-| 1.3.2 | 2026-04-10 | Stable | Connection pooling, metric-based batching |
+| 1.3.2 | 2026-04-10 | Stable | Metric-based batching |
 | 1.3.1 | 2026-04-10 | Stable | Version flag |
 | 1.3.0 | 2026-04-10 | Stable | API engine swap |
 | 1.2.2 | 2026-04-10 | Stable | Stability fixes |

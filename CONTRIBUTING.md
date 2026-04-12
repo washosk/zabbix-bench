@@ -226,7 +226,7 @@ Describe:
 
 Releases follow semantic versioning (major.minor.patch).
 
-### Steps:
+### Steps
 
 1. Update version in comments/docs
 2. Update CHANGELOG.md
@@ -292,4 +292,4 @@ go build -o zabbix-bench -cpuprofile=cpu.prof main.go
 - Review README.md and documentation
 - Look at example usage in tests
 
-Thank you for contributing! 🙏
+Thank you for contributing.

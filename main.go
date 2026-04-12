@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.3.4"
+var Version = "1.4.0"
 
 const maxLatencySamples = 1_000_000
 
@@ -46,7 +46,6 @@ type Config struct {
 	KeepHosts      bool          `yaml:"keep_hosts"`
 	BatchHosts     int           `yaml:"batch_hosts"`
 	MaxBatchSize   int           `yaml:"max_batch_size"`   // Maximum total metrics per batch
-	PoolSize       int           `yaml:"pool_size"`        // TCP connection pool size
 	MetricsPerHost int           `yaml:"metrics_per_host"` // Number of metrics to send per host
 	OutputJSON     string        // output file for JSON results
 }
@@ -120,7 +119,7 @@ type Benchmarker struct {
 	stopOnce  sync.Once
 	startTime time.Time
 
-	pooledSender *PooledSender
+	sender *TrapperSender
 
 	// Per-worker stats (indexed by workerID; per-worker mutex to avoid global contention)
 	workerStats []*WorkerStats
@@ -237,7 +236,6 @@ func defaultConfig() Config {
 		GroupName:      "Benchmark-Group",
 		BatchHosts:     50,
 		MaxBatchSize:   5000,
-		PoolSize:       0,
 		MetricsPerHost: 6,
 	}
 }
@@ -293,7 +291,6 @@ func main() {
 	flag.BoolVar(&cfg.KeepHosts, "keep-hosts", cfg.KeepHosts, "Keep hosts after test (skip cleanup)")
 	flag.IntVar(&cfg.BatchHosts, "batch-hosts", cfg.BatchHosts, "Number of hosts to pack into a single bulk Trapper packet")
 	flag.IntVar(&cfg.MaxBatchSize, "batch-metrics", cfg.MaxBatchSize, "Maximum number of metrics per batch packet")
-	flag.IntVar(&cfg.PoolSize, "pool-size", cfg.PoolSize, "TCP Connection Pool size (0 = disabled)")
 	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", cfg.MetricsPerHost, "Number of metrics to send per host")
 	flag.Parse()
 
@@ -354,9 +351,6 @@ func main() {
 		if !explicitFlags["batch-metrics"] {
 			cfg.MaxBatchSize = fileCfg.MaxBatchSize
 		}
-		if !explicitFlags["pool-size"] {
-			cfg.PoolSize = fileCfg.PoolSize
-		}
 		if !explicitFlags["metrics-per-host"] {
 			cfg.MetricsPerHost = fileCfg.MetricsPerHost
 		}
@@ -412,11 +406,11 @@ func main() {
 	}
 
 	bm := &Benchmarker{
-		cfg:          cfg,
-		pool:         newValuePool(1024),
-		done:         make(chan struct{}),
-		latencies:    make([]int64, 0, 100000),
-		pooledSender: NewPooledSender(cfg.TrapperAddr, cfg.PoolSize),
+		cfg:       cfg,
+		pool:      newValuePool(1024),
+		done:      make(chan struct{}),
+		latencies: make([]int64, 0, 100000),
+		sender:    NewTrapperSender(cfg.TrapperAddr),
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -459,8 +453,6 @@ func main() {
 	}
 
 	bm.Run()
-	bm.pooledSender.Close()
-
 	result := bm.GenerateResult()
 	bm.PrintSummary(result, cfg.MetricsPerHost)
 
@@ -473,62 +465,19 @@ func main() {
 	}
 }
 
-type PooledSender struct {
+type TrapperSender struct {
 	addr    string
-	pool    chan net.Conn
 	timeout time.Duration
 }
 
-func NewPooledSender(addr string, poolSize int) *PooledSender {
-	var pool chan net.Conn
-	if poolSize > 0 {
-		pool = make(chan net.Conn, poolSize)
-	}
-	return &PooledSender{
+func NewTrapperSender(addr string) *TrapperSender {
+	return &TrapperSender{
 		addr:    addr,
-		pool:    pool,
 		timeout: 15 * time.Second,
 	}
 }
 
-func (s *PooledSender) getConn() (net.Conn, bool, error) {
-	if s.pool != nil {
-		select {
-		case conn := <-s.pool:
-			return conn, true, nil
-		default:
-		}
-	}
-	conn, err := net.DialTimeout("tcp", s.addr, s.timeout)
-	return conn, false, err
-}
-
-func (s *PooledSender) putConn(conn net.Conn) {
-	if s.pool != nil {
-		select {
-		case s.pool <- conn:
-			return
-		default:
-		}
-	}
-	conn.Close()
-}
-
-func (s *PooledSender) Close() {
-	if s.pool == nil {
-		return
-	}
-	for {
-		select {
-		case conn := <-s.pool:
-			conn.Close()
-		default:
-			return
-		}
-	}
-}
-
-func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
+func (s *TrapperSender) SendMetrics(metrics []*zabbix.Metric) error {
 	packet := zabbix.NewPacket(metrics, false)
 	dataPacket, err := json.Marshal(packet)
 	if err != nil {
@@ -538,73 +487,44 @@ func (s *PooledSender) SendMetrics(metrics []*zabbix.Metric) error {
 	buffer := append([]byte("ZBXD\x01"), packet.DataLen()...)
 	buffer = append(buffer, dataPacket...)
 
-	conn, isPooled, err := s.getConn()
+	conn, err := net.DialTimeout("tcp", s.addr, s.timeout)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	if err = conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
-		conn.Close()
 		return fmt.Errorf("set deadline error: %v", err)
 	}
 
-	_, err = conn.Write(buffer)
-	if err != nil {
-		conn.Close()
-		if isPooled {
-			// Retry once with a new connection if the pooled one was stale
-			var dialErr error
-			conn, _, dialErr = s.getConn()
-			if dialErr != nil {
-				return dialErr
-			}
-			if dialErr = conn.SetDeadline(time.Now().Add(s.timeout)); dialErr != nil {
-				conn.Close()
-				return fmt.Errorf("set deadline error: %v", dialErr)
-			}
-			if _, dialErr = conn.Write(buffer); dialErr != nil {
-				conn.Close()
-				return fmt.Errorf("write error: %v", dialErr)
-			}
-		} else {
-			return fmt.Errorf("write error: %v", err)
-		}
+	if _, err = conn.Write(buffer); err != nil {
+		return fmt.Errorf("write error: %v", err)
 	}
 
-	// Data was written — do not retry from here to avoid double-sends.
 	header := make([]byte, 13)
-	_, err = io.ReadFull(conn, header)
-	if err != nil {
-		conn.Close()
+	if _, err = io.ReadFull(conn, header); err != nil {
 		return fmt.Errorf("read header error: %v", err)
 	}
 
 	if !bytes.Equal(header[:5], []byte("ZBXD\x01")) {
-		conn.Close()
 		return fmt.Errorf("invalid header")
 	}
 
 	dataLen := binary.LittleEndian.Uint64(header[5:13])
 	if dataLen > 100*1024*1024 {
-		conn.Close()
 		return fmt.Errorf("response too large")
 	}
 
 	data := make([]byte, dataLen)
-	_, err = io.ReadFull(conn, data)
-	if err != nil {
-		conn.Close()
+	if _, err = io.ReadFull(conn, data); err != nil {
 		return fmt.Errorf("read data error: %v", err)
 	}
 
-	// Check Zabbix response for server-side failures
 	var resp zabbix.Response
 	if jsonErr := json.Unmarshal(data, &resp); jsonErr == nil && resp.Response != "success" {
-		conn.Close()
 		return fmt.Errorf("zabbix rejected data: %s", resp.Info)
 	}
 
-	s.putConn(conn)
 	return nil
 }
 
@@ -825,7 +745,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 					err = fmt.Errorf("sender panic: %v", r)
 				}
 			}()
-			err = bm.pooledSender.SendMetrics(metrics)
+			err = bm.sender.SendMetrics(metrics)
 		}()
 
 		latency := time.Since(t0).Milliseconds()
