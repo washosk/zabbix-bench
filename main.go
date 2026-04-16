@@ -491,7 +491,7 @@ func (s *TrapperSender) SendMetrics(metrics []*zabbix.Metric) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err = conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
 		return fmt.Errorf("set deadline error: %v", err)
