@@ -374,6 +374,7 @@ type RuntimePlan struct {
 	AuthMode           string
 	APIURL             string
 	TrapperAddr        string
+	TrapperAddrLabel   string
 	GroupName          string
 	HostsCount         int
 	SendersCount       int
@@ -415,6 +416,7 @@ func BuildRuntimePlan(cfg Config) *RuntimePlan {
 	// Trapper Address
 	if cfg.TrapperAddr != "" {
 		plan.TrapperAddr = cfg.TrapperAddr
+		plan.TrapperAddrLabel = cfg.TrapperAddr
 	} else {
 		apiURL := cfg.APIURL
 		if idx := strings.Index(apiURL, "://"); idx >= 0 {
@@ -427,9 +429,11 @@ func BuildRuntimePlan(cfg Config) *RuntimePlan {
 			host = apiURL
 		}
 		if host != "" && host != "localhost" && host != "127.0.0.1" {
-			plan.TrapperAddr = host + ":10051 (inferred)"
+			plan.TrapperAddr = host + ":10051"
+			plan.TrapperAddrLabel = plan.TrapperAddr + " (inferred)"
 		} else {
-			plan.TrapperAddr = "127.0.0.1:10051 (default)"
+			plan.TrapperAddr = "127.0.0.1:10051"
+			plan.TrapperAddrLabel = plan.TrapperAddr + " (default)"
 		}
 	}
 
@@ -476,7 +480,7 @@ func PrintStartupSummary(mode string, plan *RuntimePlan, warnings int) {
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	fmt.Printf("║ Auth:    %-47s║\n", plan.AuthMode)
 	fmt.Printf("║ API:     %-47s║\n", plan.APIURL)
-	fmt.Printf("║ Trapper: %-47s║\n", plan.TrapperAddr)
+	fmt.Printf("║ Trapper: %-47s║\n", plan.TrapperAddrLabel)
 	fmt.Printf("║ Group:   %-47s║\n", plan.GroupName)
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	fmt.Printf("║ Hosts:   %-7d | Senders: %-26d║\n", plan.HostsCount, plan.SendersCount)
