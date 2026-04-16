@@ -5,7 +5,7 @@
 
 `zabbix-bench` is a Go-based benchmark tool for measuring Zabbix ingest throughput through the Trapper path.
 
-It is designed for repeatable NVPS-style benchmarking and lifecycle testing. In a single run it can:
+Built for repeatable NVPS-style benchmarking and lifecycle testing. In a single run it can:
 
 - create a benchmark host group
 - create benchmark hosts and Trapper items through the Zabbix API
@@ -14,7 +14,7 @@ It is designed for repeatable NVPS-style benchmarking and lifecycle testing. In 
 - export results as JSON
 - remove benchmark resources after the run
 
-This makes it useful for:
+Also useful for:
 
 - capacity testing a new Zabbix deployment
 - comparing tuning changes before and after server changes
@@ -288,8 +288,6 @@ When done inspecting, remove `-keep-hosts` or delete the group manually in Zabbi
 
 ## Benchmark model
 
-Understanding the tool’s execution model helps interpret the numbers.
-
 ### Host naming
 
 Hosts are created or expected using this pattern:
@@ -343,7 +341,7 @@ test.metric.7.unsigned
 | char | character |
 | log | log |
 
-All items are created as **Trapper items**.
+All items are Trapper items.
 
 ### Worker model
 
@@ -377,7 +375,7 @@ In that case, only `5000 / 200 = 25` hosts fit into a packet, so the effective b
 - `-rate 0` means flood mode
 - any positive `-rate` uses a ticker in each worker
 
-The current implementation is best understood as a **worker-level send cadence**, not a strict global traffic shaper.
+`-rate` is per-worker, not a global traffic shaper.
 
 ---
 
@@ -496,17 +494,11 @@ The JSON export includes:
 - per-worker stats
 - a small config block used for the run
 
-That makes it suitable for:
-
-- comparing runs over time
-- loading results into dashboards
-- regression checks after tuning changes
+Useful for comparing runs over time, loading results into dashboards, and checking regressions after tuning.
 
 ---
 
 ## Tuning guidance
-
-These are practical heuristics for driving different kinds of pressure.
 
 | Goal | What to change |
 | --- | --- |
@@ -530,7 +522,7 @@ Suggested workflow:
 
 ## Monitoring Zabbix during a run
 
-The client-side numbers are useful, but they are only half the story. While benchmarking, also watch the Zabbix server itself.
+Client-side numbers only show what the sender sees. While benchmarking, watch the Zabbix server too.
 
 Things worth monitoring:
 
@@ -625,7 +617,7 @@ The tool records latency in milliseconds, so very fast local runs may show a lot
 
 ## Example workflow for repeatable testing
 
-A practical pattern for structured benchmark work:
+A repeatable approach:
 
 1. create a unique group name for each test family
 2. run a 30-second validation benchmark
