@@ -223,6 +223,7 @@ Preview exactly what the tool will do without making any API changes or sending 
 ### Validation Only
 
 Perform real pre-flight checks to ensure the environment is ready. The tool will:
+
 1. Log into the Zabbix API.
 2. Verify TCP connectivity to the Zabbix Trapper port.
 3. Report success or detailed failure reasons (e.g., firewall issues, auth failure).
@@ -242,6 +243,7 @@ Profiles provide sensible defaults for common testing scenarios. Explicit CLI fl
 | `flood` | 100 | 50 | flood | Intensive pressure and stress testing |
 
 Example using a profile with a local override:
+
 ```bash
 ./zabbix-bench -profile light -hosts 20 -duration 1m
 ```
