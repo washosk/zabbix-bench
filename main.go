@@ -47,7 +47,10 @@ type Config struct {
 	BatchHosts     int           `yaml:"batch_hosts"`
 	MaxBatchSize   int           `yaml:"max_batch_size"`   // Maximum total metrics per batch
 	MetricsPerHost int           `yaml:"metrics_per_host"` // Number of metrics to send per host
-	OutputJSON     string        // output file for JSON results
+	OutputJSON     string        `yaml:"output_json"`      // output file for JSON results
+	DryRun         bool          `yaml:"dry_run"`
+	ValidateOnly   bool          `yaml:"validate_only"`
+	Profile        string        `yaml:"profile"`
 }
 
 type ValuePool struct {
@@ -263,19 +266,260 @@ func loadConfigFile(path string) (Config, error) {
 	return cfg, nil
 }
 
+func applyProfile(cfg *Config, explicitFlags map[string]bool) {
+	if cfg.Profile == "" {
+		return
+	}
+
+	type profileDefaults struct {
+		hosts   int
+		senders int
+		rate    int
+	}
+
+	profiles := map[string]profileDefaults{
+		"light":    {hosts: 5, senders: 2, rate: 1},
+		"balanced": {hosts: 25, senders: 10, rate: 0},
+		"flood":    {hosts: 100, senders: 50, rate: 0},
+	}
+
+	p, ok := profiles[strings.ToLower(cfg.Profile)]
+	if !ok {
+		return
+	}
+
+	if !explicitFlags["hosts"] {
+		cfg.NumHosts = p.hosts
+	}
+	if !explicitFlags["senders"] {
+		cfg.NumSenders = p.senders
+	}
+	if !explicitFlags["rate"] {
+		cfg.Rate = p.rate
+	}
+}
+
+type ValidationResult struct {
+	Warnings []string
+	Errors   []string
+}
+
+func ValidateConfig(cfg Config) ValidationResult {
+	res := ValidationResult{}
+
+	// Numeric sanity checks
+	if cfg.NumHosts <= 0 {
+		res.Errors = append(res.Errors, "hosts must be > 0")
+	}
+	if cfg.NumSenders <= 0 {
+		res.Errors = append(res.Errors, "senders must be > 0")
+	}
+	if cfg.MetricsPerHost <= 0 {
+		res.Errors = append(res.Errors, "metrics_per_host must be > 0")
+	}
+	if cfg.BatchHosts <= 0 {
+		res.Errors = append(res.Errors, "batch_hosts must be > 0")
+	}
+	if cfg.MaxBatchSize <= 0 {
+		res.Errors = append(res.Errors, "batch_metrics must be > 0")
+	}
+	if cfg.Rate < 0 {
+		res.Errors = append(res.Errors, "rate must be >= 0")
+	}
+
+	// Cross-field validation
+	if cfg.MaxBatchSize < cfg.MetricsPerHost {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("batch_metrics (%d) is smaller than metrics_per_host (%d); effective host batch size will be 1", cfg.MaxBatchSize, cfg.MetricsPerHost))
+	}
+
+	if cfg.NumSenders > cfg.NumHosts {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("senders (%d) exceeds host count (%d); some workers will be idle", cfg.NumSenders, cfg.NumHosts))
+	}
+
+	if cfg.SkipSetup {
+		res.Warnings = append(res.Warnings, "skip_setup is enabled; ensure hosts and items already exist with the correct prefix")
+	}
+
+	if !cfg.KeepHosts && cfg.GroupName == "Benchmark-Group" {
+		res.Warnings = append(res.Warnings, "cleanup is enabled with the default group name 'Benchmark-Group'; this may be risky in shared environments")
+	}
+
+	// API URL validation
+	if cfg.APIURL == "" {
+		res.Errors = append(res.Errors, "api_url is required")
+	} else if !strings.HasSuffix(cfg.APIURL, "/api_jsonrpc.php") {
+		res.Warnings = append(res.Warnings, "api_url does not end with /api_jsonrpc.php; check if this is correct")
+	}
+
+	// Auth validation
+	if cfg.APIKey == "" && (cfg.User == "" || cfg.Pass == "") {
+		res.Errors = append(res.Errors, "authentication requires either api_key or both user and password")
+	}
+
+	// JSON path validation
+	if cfg.OutputJSON != "" {
+		dir := os.Args[0] // fallback
+		if idx := strings.LastIndex(cfg.OutputJSON, "/"); idx >= 0 {
+			dir = cfg.OutputJSON[:idx]
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				res.Errors = append(res.Errors, fmt.Sprintf("parent directory for output_json does not exist: %s", dir))
+			}
+		}
+	}
+
+	return res
+}
+
+type RuntimePlan struct {
+	AuthMode           string
+	APIURL             string
+	TrapperAddr        string
+	GroupName          string
+	HostsCount         int
+	SendersCount       int
+	MetricsPerHost     int
+	BatchHosts         int
+	BatchMetrics       int
+	EffectiveBatchSize int
+	Duration           time.Duration
+	RateMode           string
+	SetupEnabled       bool
+	CleanupEnabled     bool
+	KeepHosts          bool
+	OutputJSON         string
+}
+
+func BuildRuntimePlan(cfg Config) *RuntimePlan {
+	plan := &RuntimePlan{
+		APIURL:         cfg.APIURL,
+		GroupName:      cfg.GroupName,
+		HostsCount:     cfg.NumHosts,
+		SendersCount:   cfg.NumSenders,
+		MetricsPerHost: cfg.MetricsPerHost,
+		BatchHosts:     cfg.BatchHosts,
+		BatchMetrics:   cfg.MaxBatchSize,
+		Duration:       cfg.Duration,
+		SetupEnabled:   !cfg.SkipSetup,
+		CleanupEnabled: !cfg.KeepHosts,
+		KeepHosts:      cfg.KeepHosts,
+		OutputJSON:     cfg.OutputJSON,
+	}
+
+	// Auth Mode
+	if cfg.APIKey != "" {
+		plan.AuthMode = "API Token"
+	} else {
+		plan.AuthMode = fmt.Sprintf("User/Pass (user: %s)", cfg.User)
+	}
+
+	// Trapper Address
+	if cfg.TrapperAddr != "" {
+		plan.TrapperAddr = cfg.TrapperAddr
+	} else {
+		apiURL := cfg.APIURL
+		if idx := strings.Index(apiURL, "://"); idx >= 0 {
+			apiURL = apiURL[idx+3:]
+		}
+		var host string
+		if idx := strings.IndexAny(apiURL, "/:"); idx >= 0 {
+			host = apiURL[:idx]
+		} else {
+			host = apiURL
+		}
+		if host != "" && host != "localhost" && host != "127.0.0.1" {
+			plan.TrapperAddr = host + ":10051 (inferred)"
+		} else {
+			plan.TrapperAddr = "127.0.0.1:10051 (default)"
+		}
+	}
+
+	// Effective Batch Size
+	effectiveBatch := cfg.BatchHosts
+	if cfg.MaxBatchSize > 0 {
+		hostsFit := cfg.MaxBatchSize / cfg.MetricsPerHost
+		if hostsFit > 0 && hostsFit < effectiveBatch {
+			effectiveBatch = hostsFit
+		}
+	}
+	plan.EffectiveBatchSize = effectiveBatch
+
+	// Rate Mode
+	if cfg.Rate == 0 {
+		plan.RateMode = "Flood (as fast as possible)"
+	} else {
+		plan.RateMode = fmt.Sprintf("Fixed (%d batches/sec per worker)", cfg.Rate)
+	}
+
+	return plan
+}
+
+func PrintValidationReport(res ValidationResult) {
+	if len(res.Warnings) > 0 {
+		fmt.Println("⚠️  Configuration Warnings:")
+		for _, w := range res.Warnings {
+			fmt.Printf("   - %s\n", w)
+		}
+		fmt.Println()
+	}
+	if len(res.Errors) > 0 {
+		fmt.Println("❌ Validation Errors:")
+		for _, e := range res.Errors {
+			fmt.Printf("   - %s\n", e)
+		}
+		fmt.Println()
+	}
+}
+
+func PrintStartupSummary(mode string, plan *RuntimePlan, warnings int) {
+	fmt.Println("╔═════════════════════════════════════════════════════════╗")
+	fmt.Printf("║ %-56s║\n", fmt.Sprintf("RUN MODE: %s", strings.ToUpper(mode)))
+	fmt.Println("╠═════════════════════════════════════════════════════════╣")
+	fmt.Printf("║ Auth:    %-47s║\n", plan.AuthMode)
+	fmt.Printf("║ API:     %-47s║\n", plan.APIURL)
+	fmt.Printf("║ Trapper: %-47s║\n", plan.TrapperAddr)
+	fmt.Printf("║ Group:   %-47s║\n", plan.GroupName)
+	fmt.Println("╠═════════════════════════════════════════════════════════╣")
+	fmt.Printf("║ Hosts:   %-7d | Senders: %-26d║\n", plan.HostsCount, plan.SendersCount)
+	fmt.Printf("║ Metrics: %-7d | Batch:   %-26d║\n", plan.MetricsPerHost, plan.BatchHosts)
+	fmt.Printf("║ Rate:    %-47s║\n", plan.RateMode)
+	fmt.Printf("║ Duration: %-46s║\n", plan.Duration)
+	fmt.Println("╠═════════════════════════════════════════════════════════╣")
+	fmt.Printf("║ Setup:   %-7v | Cleanup: %-26v║\n", plan.SetupEnabled, plan.CleanupEnabled)
+	if plan.OutputJSON != "" {
+		fmt.Printf("║ Output:  %-47s║\n", plan.OutputJSON)
+	}
+	fmt.Printf("║ Warnings: %-46d║\n", warnings)
+	fmt.Println("╚═════════════════════════════════════════════════════════╝")
+	fmt.Println()
+}
+
 func main() {
 	cfg := defaultConfig()
 
-	// First pass: just grab -config path
 	var cfgFile string
-	var outputJSON string
 	var showVersion bool
 	var showVersionShort bool
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of zabbix-bench (version %s):\n\n", Version)
+		fmt.Fprintf(os.Stderr, "Example: zabbix-bench -api-url http://zabbix/api_jsonrpc.php -api-key your-token -hosts 50 -duration 1m\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nOperational Modes:\n")
+		fmt.Fprintf(os.Stderr, "  -dry-run         Show what would happen without making any changes or sending metrics\n")
+		fmt.Fprintf(os.Stderr, "  -validate-only   Perform pre-flight checks (API, Auth, Trapper) and exit\n")
+		fmt.Fprintf(os.Stderr, "  -profile str     Pre-set benchmarking profiles: [light, balanced, flood]\n")
+		fmt.Fprintf(os.Stderr, "\nNotes:\n")
+		fmt.Fprintf(os.Stderr, "  -rate 0          Enables flood mode (send as fast as possible)\n")
+		fmt.Fprintf(os.Stderr, "  -skip-setup      Assumes hosts and trapper items already exist with the configured prefix\n")
+		fmt.Fprintf(os.Stderr, "  -keep-hosts      Prevents the automated cleanup of created hosts/groups\n")
+		fmt.Fprintf(os.Stderr, "  -api-key         If provided, overrides username/password authentication\n")
+	}
 
 	flag.BoolVar(&showVersion, "version", false, "Print release version and exit")
 	flag.BoolVar(&showVersionShort, "v", false, "Print release version and exit")
 	flag.StringVar(&cfgFile, "config", "", "YAML configuration file")
-	flag.StringVar(&outputJSON, "output-json", "", "Output results as JSON to file")
+	flag.StringVar(&cfg.OutputJSON, "output-json", "", "Output results as JSON to file")
 	flag.IntVar(&cfg.NumHosts, "hosts", cfg.NumHosts, "Number of hosts to create")
 	flag.StringVar(&cfg.HostPrefix, "prefix", cfg.HostPrefix, "Host prefix")
 	flag.IntVar(&cfg.NumSenders, "senders", cfg.NumSenders, "Number of concurrent senders")
@@ -292,6 +536,9 @@ func main() {
 	flag.IntVar(&cfg.BatchHosts, "batch-hosts", cfg.BatchHosts, "Number of hosts to pack into a single bulk Trapper packet")
 	flag.IntVar(&cfg.MaxBatchSize, "batch-metrics", cfg.MaxBatchSize, "Maximum number of metrics per batch packet")
 	flag.IntVar(&cfg.MetricsPerHost, "metrics-per-host", cfg.MetricsPerHost, "Number of metrics to send per host")
+	flag.BoolVar(&cfg.DryRun, "dry-run", false, "Show execution plan and exit")
+	flag.BoolVar(&cfg.ValidateOnly, "validate-only", false, "Perform pre-flight checks and exit")
+	flag.StringVar(&cfg.Profile, "profile", "", "Use a benchmarking profile (light, balanced, flood)")
 	flag.Parse()
 
 	if showVersion || showVersionShort {
@@ -299,72 +546,79 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Load config file first, then CLI flags override
+	// 1. Load config file if provided
 	if cfgFile != "" {
 		fileCfg, err := loadConfigFile(cfgFile)
 		if err != nil {
-			log.Fatalf("Error loading config file: %v", err)
+			log.Fatalf("❌ Error loading config file: %v", err)
 		}
-		// Apply file values as base, then re-apply any explicitly set CLI flags
-		explicitFlags := make(map[string]bool)
-		flag.Visit(func(f *flag.Flag) { explicitFlags[f.Name] = true })
 
-		if !explicitFlags["hosts"] {
+		// Track which flags were explicitly set via CLI to handle overrides correctly
+		explicit := make(map[string]bool)
+		flag.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+
+		if !explicit["hosts"] {
 			cfg.NumHosts = fileCfg.NumHosts
 		}
-		if !explicitFlags["prefix"] {
+		if !explicit["prefix"] {
 			cfg.HostPrefix = fileCfg.HostPrefix
 		}
-		if !explicitFlags["senders"] {
+		if !explicit["senders"] {
 			cfg.NumSenders = fileCfg.NumSenders
 		}
-		if !explicitFlags["rate"] {
+		if !explicit["rate"] {
 			cfg.Rate = fileCfg.Rate
 		}
-		if !explicitFlags["api-url"] {
+		if !explicit["api-url"] {
 			cfg.APIURL = fileCfg.APIURL
 		}
-		if !explicitFlags["user"] {
+		if !explicit["user"] {
 			cfg.User = fileCfg.User
 		}
-		if !explicitFlags["pass"] {
+		if !explicit["pass"] && fileCfg.Pass != "" {
 			cfg.Pass = fileCfg.Pass
 		}
-		if !explicitFlags["api-key"] {
+		if !explicit["api-key"] && fileCfg.APIKey != "" {
 			cfg.APIKey = fileCfg.APIKey
 		}
-		if !explicitFlags["trapper-addr"] {
+		if !explicit["trapper-addr"] {
 			cfg.TrapperAddr = fileCfg.TrapperAddr
 		}
-		if !explicitFlags["group"] {
+		if !explicit["group"] {
 			cfg.GroupName = fileCfg.GroupName
 		}
-		if !explicitFlags["skip-setup"] {
+		if !explicit["skip-setup"] {
 			cfg.SkipSetup = fileCfg.SkipSetup
 		}
-		if !explicitFlags["keep-hosts"] {
+		if !explicit["keep-hosts"] {
 			cfg.KeepHosts = fileCfg.KeepHosts
 		}
-		if !explicitFlags["batch-hosts"] {
+		if !explicit["batch-hosts"] {
 			cfg.BatchHosts = fileCfg.BatchHosts
 		}
-		if !explicitFlags["batch-metrics"] {
+		if !explicit["batch-metrics"] {
 			cfg.MaxBatchSize = fileCfg.MaxBatchSize
 		}
-		if !explicitFlags["metrics-per-host"] {
+		if !explicit["metrics-per-host"] {
 			cfg.MetricsPerHost = fileCfg.MetricsPerHost
 		}
-		if !explicitFlags["duration"] && fileCfg.Duration > 0 {
+		if !explicit["duration"] && fileCfg.Duration > 0 {
 			cfg.Duration = fileCfg.Duration
+		}
+		if !explicit["output-json"] && fileCfg.OutputJSON != "" {
+			cfg.OutputJSON = fileCfg.OutputJSON
 		}
 	}
 
-	cfg.OutputJSON = outputJSON
+	// 2. Apply Profile defaults to fields not explicitly set
+	explicit := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	applyProfile(&cfg, explicit)
 
+	// 3. Apply Environment Variables for Auth
 	if cfg.APIKey == "" {
 		cfg.APIKey = os.Getenv("ZABBIX_API_KEY")
 	}
-
 	if cfg.Pass == "" {
 		cfg.Pass = os.Getenv("ZABBIX_PASS")
 		if cfg.Pass == "" {
@@ -372,45 +626,58 @@ func main() {
 		}
 	}
 
-	// If trapper address not set, derive it from API URL
-	if cfg.TrapperAddr == "" {
-		apiURL := cfg.APIURL
-		if idx := strings.Index(apiURL, "://"); idx >= 0 {
-			apiURL = apiURL[idx+3:]
-		}
-		var host string
-		if idx := strings.IndexAny(apiURL, "/:"); idx >= 0 {
-			host = apiURL[:idx]
-		} else {
-			host = apiURL
-		}
-		if host != "" && host != "localhost" && host != "127.0.0.1" {
-			cfg.TrapperAddr = host + ":10051"
-			log.Printf("Auto-detected Trapper address from API URL: %s", cfg.TrapperAddr)
-		} else {
-			cfg.TrapperAddr = "127.0.0.1:10051"
-		}
+	// 4. Validate
+	vRes := ValidateConfig(cfg)
+	if len(vRes.Errors) > 0 {
+		PrintValidationReport(vRes)
+		os.Exit(1)
 	}
 
-	if cfg.Rate < 0 {
-		log.Fatalf("-rate must be >= 0 (0 = flood mode)")
+	// 5. Build Runtime Plan
+	plan := BuildRuntimePlan(cfg)
+
+	// 6. Handle Special Modes
+	if cfg.DryRun {
+		PrintStartupSummary("Dry Run", plan, len(vRes.Warnings))
+		PrintValidationReport(vRes)
+		os.Exit(0)
 	}
-	if cfg.NumSenders <= 0 {
-		log.Fatalf("-senders must be > 0")
+
+	if cfg.ValidateOnly {
+		PrintStartupSummary("Validation Only", plan, len(vRes.Warnings))
+		PrintValidationReport(vRes)
+		bm := &Benchmarker{cfg: cfg, sender: NewTrapperSender(plan.TrapperAddr)}
+		fmt.Println("🚀 Performing connectivity checks...")
+
+		if err := bm.login(); err != nil {
+			fmt.Printf("❌ API Connectivity/Auth: FAILED - %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ API Connectivity/Auth: SUCCESS")
+
+		// Test trapper connection
+		conn, err := net.DialTimeout("tcp", plan.TrapperAddr, 5*time.Second)
+		if err != nil {
+			fmt.Printf("❌ Trapper Connectivity: FAILED - %v\n", err)
+			fmt.Println("   (Check firewall, port, and trapper address)")
+			os.Exit(1)
+		}
+		conn.Close()
+		fmt.Println("✅ Trapper Connectivity: SUCCESS")
+
+		fmt.Println("\n✨ Pre-flight checks passed successfully.")
+		os.Exit(0)
 	}
-	if cfg.NumHosts <= 0 {
-		log.Fatalf("-hosts must be > 0")
-	}
-	if cfg.MetricsPerHost <= 0 {
-		log.Fatalf("-metrics-per-host must be > 0")
-	}
+
+	// 7. Normal Execution
+	PrintStartupSummary("Benchmark", plan, len(vRes.Warnings))
 
 	bm := &Benchmarker{
 		cfg:       cfg,
 		pool:      newValuePool(1024),
 		done:      make(chan struct{}),
 		latencies: make([]int64, 0, 100000),
-		sender:    NewTrapperSender(cfg.TrapperAddr),
+		sender:    NewTrapperSender(plan.TrapperAddr),
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -429,13 +696,13 @@ func main() {
 
 	if cfg.SkipSetup {
 		if err := bm.loadExistingHosts(); err != nil {
-			log.Printf("Setup failed: %v", err)
+			log.Printf("❌ Setup failed: %v", err)
 			bm.Cleanup()
 			os.Exit(1)
 		}
 	} else {
 		if err := bm.Setup(); err != nil {
-			log.Printf("Setup failed: %v", err)
+			log.Printf("❌ Setup failed: %v", err)
 			bm.Cleanup()
 			os.Exit(1)
 		}
