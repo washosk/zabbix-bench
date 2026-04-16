@@ -1,292 +1,277 @@
 # Quick Start Guide
 
-Get zabbix-bench up and running in minutes.
+Use this guide when you want a safe first run without reading the full documentation first.
+
+For the full behavior, caveats, and tuning notes, read [`README.md`](README.md).
 
 ---
 
-## Installation
+## Before you start
 
-### Option 1: Download Pre-built Binary
+`zabbix-bench` is not just a packet generator.
 
-```bash
-# Linux x86_64
-wget https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench-linux-amd64
-chmod +x zabbix-bench-linux-amd64
+A standard run can:
 
-# Or macOS (Intel)
-wget https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench-darwin-amd64
-chmod +x zabbix-bench-darwin-amd64
+- create a host group
+- create hosts and items through the Zabbix API
+- send metrics through the Trapper
+- delete the benchmark hosts and group afterward
+
+That means you should use a **dedicated benchmark group name**.
+
+---
+
+## What you need
+
+You need all of the following:
+
+- a reachable Zabbix API URL
+- network access to the Zabbix Trapper port, usually `10051`
+- either:
+  - a Zabbix username and password, or
+  - a Zabbix API token
+
+Typical API URL format:
+
+```text
+http://your-zabbix-server/zabbix/api_jsonrpc.php
 ```
 
-### Option 2: Homebrew (macOS/Linux)
+---
+
+## Install
+
+### Option 1: Download a release binary
 
 ```bash
-brew tap washosk/zabbix-bench
-brew install zabbix-bench
+curl -LO https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench
+chmod +x zabbix-bench
+./zabbix-bench --help
 ```
 
-### Option 3: Build from Source
+### Option 2: Build from source
 
 ```bash
 git clone https://github.com/washosk/zabbix-bench.git
 cd zabbix-bench
+go mod tidy
 go build -o zabbix-bench main.go
-```
-
-### Option 4: Go Install
-
-```bash
-go install github.com/washosk/zabbix-bench@latest
+./zabbix-bench --help
 ```
 
 ---
 
-## Prerequisites
+## Recommended first run
 
-1. **Zabbix Server** running and accessible
-   - API endpoint: `http://your-zabbix-server/zabbix/api_jsonrpc.php`
-   - Trapper port: 10051 (default)
-
-2. **Zabbix Admin Account**
-   - Default: `Admin` / `zabbix`
-   - Or an API token (Zabbix 5.4+)
-
-3. **Network Access**
-   - Can reach Zabbix API URL
-   - Can reach Zabbix Trapper port
-
----
-
-## Basic Usage
-
-### 1. Simple test (30 seconds)
+Use a small run and keep the created hosts so you can inspect them.
 
 ```bash
 ./zabbix-bench \
-  -api-url "http://localhost/zabbix/api_jsonrpc.php" \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
   -user "Admin" \
   -pass "zabbix" \
+  -group "Benchmark-Group-Quickstart" \
+  -hosts 10 \
+  -senders 4 \
+  -batch-hosts 10 \
+  -duration 30s \
+  -keep-hosts
+```
+
+What this does:
+
+- logs into the Zabbix API
+- creates a benchmark group if needed
+- creates 10 hosts named `bench-0001` to `bench-0010`
+- creates Trapper items on those hosts
+- runs a 30-second benchmark
+- prints a summary
+- keeps the created resources because `-keep-hosts` is set
+
+After you verify everything looks right, rerun without `-keep-hosts` if you want automatic cleanup.
+
+---
+
+## If you prefer an API token
+
+```bash
+export ZABBIX_API_KEY="your-token"
+
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -group "Benchmark-Group-Quickstart-Token" \
+  -hosts 10 \
+  -senders 4 \
+  -duration 30s \
+  -keep-hosts
+```
+
+---
+
+## Cleanup run
+
+Once you are comfortable with the behavior, run without `-keep-hosts`:
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Quickstart" \
+  -hosts 10 \
+  -senders 4 \
+  -batch-hosts 10 \
   -duration 30s
 ```
 
-**Output:**
-
-- Console: Real-time progress and summary
-- Creates 10 temporary hosts
-- Sends metrics via Trapper
-- Cleans up automatically
-
-### 2. Larger test (2 minutes)
-
-```bash
-./zabbix-bench \
-  -hosts 50 \
-  -senders 20 \
-  -batch-hosts 50 \
-  -duration 2m
-```
-
-**What it does:**
-
-- Creates 50 test hosts
-- Uses 20 concurrent senders
-- Batches 50 hosts per packet
-- Runs for 2 minutes
-- Reports P50, P95, P99 latencies
-
-### 3. With API token (more secure)
-
-```bash
-export ZABBIX_API_KEY="your-api-token-here"
-./zabbix-bench \
-  -api-url "http://localhost/zabbix/api_jsonrpc.php" \
-  -hosts 20 \
-  -duration 1m
-```
-
-### 4. Save results to JSON
-
-```bash
-./zabbix-bench \
-  -hosts 20 \
-  -duration 30s \
-  -output-json benchmark-results.json
-
-# View results
-cat benchmark-results.json | jq '.'
-```
+This will clean up the benchmark resources when the run ends.
 
 ---
 
-## Configuration File
+## Minimal config file example
 
 Create `benchmark.yaml`:
 
 ```yaml
-api_url: "http://localhost/zabbix/api_jsonrpc.php"
+api_url: "http://127.0.0.1:8080/api_jsonrpc.php"
 user: "Admin"
 pass: "zabbix"
-hosts: 50
-senders: 20
-batch_hosts: 50
-trapper_addr: "127.0.0.1:10051"
-group: "LoadTest"
-duration: "2m"
+group: "Benchmark-Group-Quickstart-Yaml"
+hosts: 10
+prefix: "bench-"
+senders: 4
+rate: 0
+batch_hosts: 10
+max_batch_size: 5000
+metrics_per_host: 6
+duration: "30s"
+skip_setup: false
+keep_hosts: true
 ```
 
-Run with:
+Run it:
 
 ```bash
-./zabbix-bench -config benchmark.yaml -duration 2m
+./zabbix-bench -config benchmark.yaml
 ```
+
+Important:
+
+- the YAML key is `max_batch_size`
+- the CLI flag is `-batch-metrics`
 
 ---
 
-## Understanding Output
+## What the summary means
 
-### Console output example
+At the end of the run you will see a summary like this:
 
 ```text
 ╔═════════════════════════════════════════════════════════╗
-║               BENCHMARK SUMMARY REPORT                  ║
+║              BENCHMARK SUMMARY REPORT                  ║
 ╠═════════════════════════════════════════════════════════╣
-║ Hosts tested:        10                                 ║
-║ Total host sends:    327161                             ║
-║ Total values:        1962966                            ║
-║ Total packets:       137121                             ║
-║ Errors:              0 (0.0%)                           ║
+║ Hosts tested:        10                                ║
+║ Total host sends:    327161                            ║
+║ Total values:        1962966                           ║
+║ Total packets:       137121                            ║
+║ Errors:              0 (0.0%)                          ║
 ╠═════════════════════════════════════════════════════════╣
-║ Throughput (VPS):    63501.22                           ║
-║ Avg latency:         0 ms                               ║
-║ Min latency:         0 ms                               ║
-║ Max latency:         1001 ms                            ║
-║ P50 latency:         0 ms                               ║
-║ P95 latency:         0 ms                               ║
-║ P99 latency:         1 ms                               ║
-╠═════════════════════════════════════════════════════════╣
-║ Per-worker statistics:                                  ║
-║   W0: 31638 pkts, 94914 hosts, 0 err, 18423 VPS         ║
-║   W1: 31708 pkts, 95124 hosts, 0 err, 18463 VPS         ║
-╠═════════════════════════════════════════════════════════╣
+║ Throughput (VPS):    63501.22                          ║
+║ Avg latency:         0 ms                              ║
+║ Min latency:         0 ms                              ║
+║ Max latency:         1001 ms                           ║
+║ P50 latency:         0 ms                              ║
+║ P95 latency:         0 ms                              ║
+║ P99 latency:         1 ms                              ║
 ╚═════════════════════════════════════════════════════════╝
 ```
 
-**What it means:**
+Quick interpretation:
 
-- **VPS**: Values per second sent
-- **Latency**: Response time from Zabbix Trapper
-- **P50/P95/P99**: Percentiles (50% of packets at or below P50ms, etc.)
-- **Worker stats**: Individual sender goroutine performance
+- **Hosts tested**: how many hostnames were included in the run
+- **Total host sends**: successful host sends across all packets
+- **Total values**: successful host sends multiplied by metrics per host
+- **Total packets**: successful packets sent
+- **Throughput (VPS)**: values per second
+- **P95 / P99 latency**: tail latency for successful packets
 
-### JSON output example
+---
 
-```json
-{
-  "duration_seconds": 30.91,
-  "hosts_tested": 10,
-  "total_host_sends": 327161,
-  "total_values": 1962966,
-  "total_packets": 137121,
-  "error_count": 0,
-  "error_rate_percent": 0,
-  "throughput_vps": 63501.22,
-  "avg_latency_ms": 0,
-  "min_latency_ms": 0,
-  "max_latency_ms": 1001,
-  "p50_latency_ms": 0,
-  "p95_latency_ms": 0,
-  "p99_latency_ms": 1,
-  "errors_by_type": {
-    "timeout": 0,
-    "closed": 0,
-    "network": 0,
-    "other": 0,
-    "total": 0
-  },
-  "worker_stats": [
-    {
-      "worker_id": 0,
-      "packets_sent": 31638,
-      "hosts_sent": 94914,
-      "errors": 0,
-      "total_latency_ms": 17941,
-      "min_latency_ms": 0,
-      "max_latency_ms": 1001,
-      "avg_latency_ms": 0
-    }
-  ],
-  "config": {
-    "batch_hosts": 50,
-    "hosts": 10,
-    "metrics_per_host": 6,
-    "rate": 0,
-    "senders": 4,
-    "trapper_addr": "127.0.0.1:10051"
-  }
-}
+## Useful next commands
+
+### Save results to JSON
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Json" \
+  -hosts 20 \
+  -duration 30s \
+  -output-json results.json
+```
+
+### Increase load slightly
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Step2" \
+  -hosts 50 \
+  -senders 10 \
+  -batch-hosts 25 \
+  -duration 1m
+```
+
+### Reuse existing hosts
+
+Only do this if matching hosts and items already exist.
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Step2" \
+  -prefix "bench-" \
+  -hosts 50 \
+  -senders 10 \
+  -skip-setup \
+  -duration 1m
 ```
 
 ---
 
-## Common Scenarios
+## Common mistakes
 
-### Scenario 1: Find server capacity
+### Using a shared group name
 
-```bash
-# Start small
-./zabbix-bench -hosts 10 -senders 5 -duration 1m
+Avoid this. Cleanup operates at the benchmark group level.
 
-# Gradually increase
-./zabbix-bench -hosts 50 -senders 20 -duration 1m
-./zabbix-bench -hosts 100 -senders 40 -duration 1m
+### Forgetting the YAML key name
 
-# Stop when errors appear or latency spikes
+In YAML, use:
+
+```yaml
+max_batch_size: 5000
 ```
 
-### Scenario 2: Sustained load test
+Not:
 
-```bash
-./zabbix-bench \
-  -hosts 50 \
-  -senders 20 \
-  -rate 50000 \
-  -duration 10m
+```yaml
+batch_metrics: 5000
 ```
 
-- Fixed rate: 50,000 batches/sec
-- Watch P99 latency for degradation
-- Verify no errors over time
+### Expecting `-skip-setup` to create missing items
 
-### Scenario 3: Stress test (find breaking point)
+It does not. It assumes the hosts already exist and have matching Trapper items.
 
-```bash
-./zabbix-bench \
-  -hosts 200 \
-  -senders 100 \
-  -batch-hosts 10 \
-  -duration 5m
-```
+### Relying on auto-detected Trapper address in every topology
 
-- No rate limit (flood mode)
-- Many hosts and senders
-- Stop when seeing errors
-- Note: may saturate Zabbix or network
-
-### Scenario 4: API token authentication
-
-```bash
-# 1. Create token in Zabbix UI
-# Admin > API tokens > Create
-
-# 2. Set environment variable
-export ZABBIX_API_KEY="your-token-here"
-
-# 3. Run benchmark (no password needed)
-./zabbix-bench \
-  -api-url "http://localhost/zabbix/api_jsonrpc.php" \
-  -hosts 20 \
-  -duration 30s
-```
+If your API host and Trapper host differ, set `-trapper-addr` explicitly.
 
 ---
 
@@ -295,95 +280,46 @@ export ZABBIX_API_KEY="your-token-here"
 ### Connection refused
 
 ```text
-Error: dial tcp 127.0.0.1:10051: connect: connection refused
+dial tcp 127.0.0.1:10051: connect: connection refused
 ```
 
-**Solution:**
+Check:
 
-- Verify Zabbix is running: `curl http://localhost/zabbix/`
-- Check Trapper port: `telnet localhost 10051`
-- Verify firewall allows port 10051
+- the Trapper is enabled and reachable
+- the host and port are correct
+- firewalls are not blocking the connection
 
-### Authentication failed
+### Login failed
 
 ```text
-Error logging into Zabbix API: invalid username or password
+error logging into Zabbix API: invalid username or password
 ```
 
-**Solution:**
+Check:
 
-- Verify credentials: `Admin` / `zabbix`
-- Check API URL ends with `api_jsonrpc.php`
-- Try API token instead: `-api-key "token-here"`
+- the API URL is correct
+- credentials are correct
+- `ZABBIX_PASS` is not set to an old value
+- the token is valid if using token auth
 
-### High error rate
+### High error rate under load
 
-```text
-Errors: 1234 (5.3%)
-```
+Try:
 
-**Solution:**
-
-- Reduce load: fewer hosts or senders
-- Increase rate limit: `-rate 1000` instead of `-rate 0`
-- Check Zabbix logs for capacity issues
-- Monitor Zabbix processes: `zabbix_server -R diaginfo`
-
-### Out of memory
-
-```text
-panic: runtime error: memory allocation failed
-```
-
-**Solution:**
-
-- Reduce number of hosts/senders
-- Use shorter duration
-- Check system resources: `free -h`, `top`
+- fewer senders
+- fewer metrics per host
+- smaller host batches
+- a shorter test
+- a positive `-rate` instead of flood mode
 
 ---
 
-## Tips for Best Results
+## Next step
 
-1. **Warm up Zabbix:**
-   - Run small test first
-   - Allows caches to initialize
+Once the quickstart run works, move to [`README.md`](README.md) for:
 
-2. **Monitor Zabbix:**
-   - Watch CPU, memory, disk I/O
-   - Check `Administration > Diagnostics`
-   - Monitor queue size and cache usage
-
-3. **Use configuration file:**
-   - Reusable across tests
-   - Easier to track settings
-   - Good for CI/CD
-
-4. **Save JSON results:**
-   - Compare runs over time
-   - Analyze trends
-   - Integrate with monitoring
-
-5. **Run multiple tests:**
-   - Results vary with system load
-   - Average 3-5 runs
-   - Use comparable settings
-
----
-
-## Next Steps
-
-- Read [README.md](README.md) for full documentation
-- Check [DISTRIBUTION.md](DISTRIBUTION.md) for package manager setup
-- See [CONTRIBUTING.md](CONTRIBUTING.md) if you want to contribute
-- Review [CHANGELOG.md](CHANGELOG.md) for version history
-
----
-
-## Need Help?
-
-- Open an issue on [GitHub](https://github.com/washosk/zabbix-bench/issues)
-- Check existing documentation
-- Review example configurations
-
-Happy benchmarking.
+- a full explanation of batching and rate semantics
+- tuning guidance
+- known caveats
+- safer use of `-skip-setup`
+- better interpretation of results

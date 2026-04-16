@@ -1,67 +1,117 @@
 # zabbix-bench
 
-A high-performance Zabbix NVPS (New Values Per Second) benchmark tool written in Go.
+`zabbix-bench` is a Go-based benchmark tool for measuring Zabbix ingest throughput through the Trapper path.
 
-It handles the complete lifecycle of a stress test:
+It is designed for repeatable NVPS-style benchmarking and lifecycle testing. In a single run it can:
 
-1. Auto-creates host groups, hosts and items via the Zabbix API
-2. Floods the Zabbix Trapper with bulk metric packets
-3. Auto-deletes all created resources when the test ends or is interrupted (Ctrl+C)
+- create a benchmark host group
+- create benchmark hosts and Trapper items through the Zabbix API
+- send bulk metric packets to the Zabbix Trapper
+- report throughput, latency percentiles, per-worker stats, and error breakdowns
+- export results as JSON
+- remove benchmark resources after the run
+
+This makes it useful for:
+
+- capacity testing a new Zabbix deployment
+- comparing tuning changes before and after server changes
+- stress testing database-backed ingest paths
+- building reproducible benchmark runs for CI, labs, or internal docs
+
+---
+
+## What the tool actually does
+
+A normal run has three phases:
+
+1. **Setup**
+   - logs into the Zabbix API using either username/password or an API token
+   - ensures the configured host group exists
+   - creates hosts named from the configured prefix and a zero-padded sequence, for example `bench-0001`
+   - creates Trapper items on each host
+
+2. **Benchmark**
+   - splits the configured hosts across concurrent sender workers
+   - generates metric values in memory
+   - sends bulk packets to the Zabbix Trapper either as fast as possible or at a fixed rate
+   - tracks packet latency, throughput, and categorized errors
+
+3. **Cleanup**
+   - unless `-keep-hosts` is set, deletes hosts in the benchmark group and then deletes the group itself
+
+That last point matters: cleanup is intentionally aggressive.
+
+---
+
+## Important safety notes
+
+Read this before pointing the tool at any shared environment.
+
+- Use a **dedicated benchmark group name**. Do not reuse a production group.
+- By default, cleanup deletes **all hosts returned by Zabbix for the configured benchmark group**, then removes the group itself.
+- `-skip-setup` does **not** validate that every expected benchmark host already exists before sending starts. It reconstructs hostnames from the configured prefix and count.
+- `kill -9` prevents graceful cleanup.
+- If `-trapper-addr` is not set, the tool derives it from `-api-url`. For non-localhost API URLs it uses the same host with port `10051`.
+
+Recommended first practice:
+
+- use a unique group name such as `Benchmark-Group-2026-04-16`
+- run a short test first
+- use `-keep-hosts` on the first run if you want to inspect what was created
 
 ---
 
 ## Features
 
-- Configurable metrics per host (1 to thousands) for variable load profiles
-- 6 metric types cycled per host: Boolean, Unsigned, Float, Text, Character, Log
-- Flood mode (`-rate 0`) sends metrics as fast as possible with no artificial delay
-- Bulk Trapper packets pack multiple hosts per packet to maximize throughput
-- Metric-based batching (`-batch-metrics`) to cap payload size independently of host count
-- Pre-generated value pool eliminates `rand` overhead in the hot loop
-- Per-worker atomic latency and error tracking with minimal lock contention
-- Real-time progress reporting every 5 seconds (VPS, errors, latency)
-- Latency percentiles (P50, P95, P99) for detailed performance analysis
-- Per-worker statistics for identifying bottlenecks
-- Error categorization (timeout, connection closed, network, other)
-- Zabbix Trapper response validation (detects server-side rejections)
-- JSON output export for analysis and CI/CD integration
-- YAML configuration file support with duration string parsing (`duration: "30s"`)
-- Auto-detection of Trapper address from API URL
-- Duration flag for automatic time-limited runs
-- Graceful shutdown on Ctrl+C or SIGTERM with full cleanup
-- Zabbix 7.0 compatible (supports username/password or API tokens)
+- Configurable host count, sender count, and metric count per host
+- Six metric types cycled per host: boolean, unsigned, float, text, character, log
+- Flood mode with `-rate 0`
+- Bulk Trapper packets using host-based batching
+- Metric-count cap with `-batch-metrics`
+- Auto-creation of hosts and items through the Zabbix API
+- Graceful stop on Ctrl+C or SIGTERM
+- Latency tracking with P50, P95, and P99 percentiles
+- Per-worker packet, host, latency, and error statistics
+- Error categorization: timeout, closed connection, network, other
+- JSON export for later analysis
+- YAML configuration file support
+- Username/password authentication or API token authentication
+- Automatic Trapper address detection from API URL when possible
 
 ---
 
 ## Requirements
 
-- Go 1.24+ (for building from source)
-- Zabbix API access (Admin or Super Admin account)
-- Zabbix Trapper port accessible (default: 10051)
+To use the tool successfully you need:
+
+- a reachable Zabbix API endpoint
+- network access to the Zabbix Trapper port, usually `10051`
+- API credentials with enough permissions to create and delete host groups, hosts, and items
+- Go 1.24+ only if you plan to build from source
+
+The tool is intended for Zabbix environments that support API token auth or normal API login.
 
 ---
 
 ## Installation
 
-### Download pre-built binaries
+### Download a release binary
 
-Grab the binary for your platform from the [latest release](https://github.com/washosk/zabbix-bench/releases/latest):
+Download the correct binary from the latest GitHub release.
 
-| Platform            | Binary                       |
-|---------------------|------------------------------|
-| Linux x86_64        | `zabbix-bench`               |
-| Linux ARM64         | `zabbix-bench-linux-arm64`   |
-| macOS Intel         | `zabbix-bench-darwin-amd64`  |
-| macOS Apple Silicon | `zabbix-bench-darwin-arm64`  |
-| Windows x86_64      | `zabbix-bench.exe`           |
+Typical example:
 
 ```bash
-# Example: Linux x86_64
-curl -LO https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench
-curl -LO https://github.com/washosk/zabbix-bench/releases/latest/download/SHA256SUMS
-sha256sum -c SHA256SUMS --ignore-missing
-chmod +x zabbix-bench
-./zabbix-bench --help
+git clone https://github.com/washosk/zabbix-bench.git
+cd zabbix-bench
+```
+
+Or fetch a release asset directly, for example on Linux:
+
+```bash
+curl -LO https://github.com/washosk/zabbix-bench/releases/latest/download/zabbix-bench-linux-amd64
+chmod +x zabbix-bench-linux-amd64
+./zabbix-bench-linux-amd64 --help
 ```
 
 ### Build from source
@@ -71,367 +121,559 @@ git clone https://github.com/washosk/zabbix-bench.git
 cd zabbix-bench
 go mod tidy
 go build -o zabbix-bench main.go
+./zabbix-bench --help
 ```
 
 ---
 
-## Usage
+## Command-line usage
 
 ```text
 ./zabbix-bench [flags]
-
-Flags:
-  -api-url          string    Zabbix API URL (default "http://localhost/zabbix/api_jsonrpc.php")
-  -user             string    Zabbix username (default "Admin")
-  -pass             string    Zabbix password (default: $ZABBIX_PASS or "zabbix")
-  -api-key          string    Zabbix API token (default: $ZABBIX_API_KEY; skips user.login)
-  -trapper-addr     string    Zabbix Trapper host:port (auto-detected from -api-url if not set)
-  -hosts            int       Number of hosts to create (default 10)
-  -prefix           string    Hostname prefix (default "bench-")
-  -senders          int       Number of concurrent sender goroutines (default 10)
-  -rate             int       Batches per second per host; 0 = flood mode (default 0)
-  -batch-hosts      int       Hosts per bulk Trapper packet (default 50)
-  -batch-metrics    int       Max metrics per packet; constrains -batch-hosts when smaller (default 5000)
-  -metrics-per-host int       Number of metrics to send per host (default 6)
-  -duration         duration  Benchmark duration e.g. 30s, 2m (0 = run until Ctrl+C)
-  -skip-setup       bool      Skip host/item creation, use hosts that already exist
-  -keep-hosts       bool      Skip cleanup after test; keep hosts in Zabbix
-  -group            string    Host Group name (default "Benchmark-Group")
-  -config           string    YAML configuration file (CLI flags override config file values)
-  -output-json      string    Export results as JSON to file
-  -version          bool      Print release version and exit
-  -v                bool      Print release version and exit (short form)
 ```
+
+### Flags
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `-api-url` | Zabbix API URL | `http://localhost/zabbix/api_jsonrpc.php` |
+| `-user` | Zabbix username | `Admin` |
+| `-pass` | Zabbix password. If omitted, uses `ZABBIX_PASS`, then falls back to `zabbix` | none at flag level |
+| `-api-key` | Zabbix API token. If set, skips `user.login` | none |
+| `-trapper-addr` | Zabbix Trapper address in `host:port` form | auto-detected |
+| `-hosts` | Number of hosts to create or address | `10` |
+| `-prefix` | Host prefix used for generated names like `bench-0001` | `bench-` |
+| `-senders` | Number of concurrent sender workers | `10` |
+| `-rate` | Send frequency. `0` means flood mode | `0` |
+| `-batch-hosts` | Target number of hosts per Trapper packet | `50` |
+| `-batch-metrics` | Maximum total metrics per packet | `5000` |
+| `-metrics-per-host` | Number of metrics sent per host per batch | `6` |
+| `-duration` | Test duration such as `30s` or `2m`. `0` means run until interrupted | `0` |
+| `-skip-setup` | Skip host and item creation, use the expected existing naming pattern | `false` |
+| `-keep-hosts` | Skip cleanup after the run | `false` |
+| `-group` | Host group name | `Benchmark-Group` |
+| `-config` | YAML configuration file | none |
+| `-output-json` | Write benchmark result JSON to a file | none |
+| `-version` | Print version and exit | `false` |
+| `-v` | Short form of `-version` | `false` |
 
 ### Environment variables
 
-| Variable         | Description                                                                                          |
-|------------------|------------------------------------------------------------------------------------------------------|
-| `ZABBIX_API_KEY` | Zabbix API token (Zabbix 5.4+). When set, skips `user.login` entirely.                               |
-| `ZABBIX_PASS`    | Zabbix password. Used when `-pass` is not provided. Avoids exposing credentials in the process list. |
+| Variable | Meaning |
+|---|---|
+| `ZABBIX_API_KEY` | API token used when `-api-key` is not provided |
+| `ZABBIX_PASS` | Password used when `-pass` is not provided |
 
 ---
 
 ## Authentication
 
-Two methods are supported:
+Two authentication paths are supported.
 
-### Method 1: Username and Password (default)
+### Username and password
 
 ```bash
-./zabbix-bench -api-url "http://localhost:8080/api_jsonrpc.php" -user "Admin" -pass "zabbix" -hosts 10
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -duration 30s
 ```
 
-Or use environment variable:
+Or with an environment variable:
 
 ```bash
 export ZABBIX_PASS="your-password"
-./zabbix-bench -api-url "http://localhost:8080/api_jsonrpc.php" -user "Admin" -hosts 10
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -duration 30s
 ```
 
-### Method 2: API Token (recommended)
+### API token
 
-Tokens are more secure and don't expose passwords. Requires Zabbix 5.4+.
-
-**Create a token via Zabbix API:**
+If an API token is available, it is the cleaner option because the tool skips `user.login`.
 
 ```bash
-# 1. Login and get session
-SESSION=$(curl -s -X POST "http://localhost:8080/api_jsonrpc.php" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"user.login","params":{"username":"Admin","password":"zabbix"},"id":1}' \
-  | grep -o '"result":"[^"]*' | cut -d'"' -f4)
-
-# 2. Create token
-curl -s -X POST "http://localhost:8080/api_jsonrpc.php" \
-  -H "Content-Type: application/json" \
-  -d "{\"jsonrpc\":\"2.0\",\"method\":\"token.create\",\"params\":{\"name\":\"zabbix-bench\",\"userid\":\"1\"},\"auth\":\"$SESSION\",\"id\":1}"
-```
-
-**Use with zabbix-bench:**
-
-```bash
-export ZABBIX_API_KEY="<paste-token-value>"
-./zabbix-bench -api-url "http://localhost:8080/api_jsonrpc.php" -hosts 10 -duration 30s
+export ZABBIX_API_KEY="your-api-token"
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -hosts 20 \
+  -duration 30s
 ```
 
 ---
 
-## Configuration files
+## Configuration file
 
-Instead of passing many CLI flags, create a YAML config file:
+You can use a YAML file instead of passing many flags.
+
+### Important naming note
+
+The CLI flag and the YAML key are intentionally different for metric-batch sizing:
+
+- CLI flag: `-batch-metrics`
+- YAML key: `max_batch_size`
+
+That is easy to miss, so use the YAML example below as-is.
+
+### Example `benchmark.yaml`
 
 ```yaml
-# benchmark.yaml
-hosts: 100
-senders: 20
-metrics_per_host: 10
-api_url: "http://localhost:8080/api_jsonrpc.php"
+api_url: "http://127.0.0.1:8080/api_jsonrpc.php"
 user: "Admin"
 pass: "zabbix"
-batch_hosts: 50
-group: "LoadTest"
-duration: "2m"
+api_key: ""
+trapper_addr: ""
+group: "Benchmark-Group-Local"
+hosts: 20
+prefix: "bench-"
+senders: 10
+rate: 0
+batch_hosts: 20
+max_batch_size: 5000
+metrics_per_host: 6
+duration: "30s"
 skip_setup: false
 keep_hosts: false
 ```
 
-Run with config file:
+Run it like this:
 
 ```bash
-./zabbix-bench -config benchmark.yaml -duration 2m
+./zabbix-bench -config benchmark.yaml
 ```
 
-CLI flags override config file values:
+CLI flags override config values:
 
 ```bash
-./zabbix-bench -config benchmark.yaml -hosts 50 -senders 10
+./zabbix-bench -config benchmark.yaml -hosts 50 -senders 20 -duration 2m
 ```
 
 ---
 
-## Output modes
+## Safe first run
 
-### Console output
-
-Includes real-time progress and final summary with latency percentiles and per-worker stats.
-
-### JSON export
-
-Export detailed results for analysis, CI/CD integration, or comparison:
+For a first run in a new environment, keep it small and use a unique group name.
 
 ```bash
-./zabbix-bench -hosts 20 -duration 30s -output-json results.json
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-FirstRun" \
+  -hosts 10 \
+  -senders 4 \
+  -batch-hosts 10 \
+  -duration 30s \
+  -keep-hosts
 ```
 
-JSON file includes:
+This lets you:
 
-- Latency percentiles (P50, P95, P99)
-- Per-worker statistics (packets, hosts, errors, min/max/avg latency)
-- Error breakdown by category (timeout, connection, network, other)
-- Full configuration used for the run
+- verify the API works
+- verify the Trapper path is reachable
+- inspect the generated hosts and items afterward
+- confirm the host naming and item layout before you enable cleanup
+
+When done inspecting, remove `-keep-hosts` or delete the group manually in Zabbix.
+
+---
+
+## Benchmark model
+
+Understanding the tool’s execution model helps interpret the numbers.
+
+### Host naming
+
+Hosts are created or expected using this pattern:
+
+```text
+<prefix><zero-padded index>
+```
+
+Examples with the default prefix:
+
+```text
+bench-0001
+bench-0002
+bench-0003
+```
+
+### Metric generation
+
+Each host gets `-metrics-per-host` items. The metric types cycle in this order:
+
+1. bool
+2. unsigned
+3. float
+4. text
+5. char
+6. log
+
+If you use more than six metrics per host, the cycle repeats.
+
+Examples for `-metrics-per-host 8`:
+
+```text
+test.metric.0.bool
+test.metric.1.unsigned
+test.metric.2.float
+test.metric.3.text
+test.metric.4.char
+test.metric.5.log
+test.metric.6.bool
+test.metric.7.unsigned
+```
+
+### Item types created
+
+| Metric type | Zabbix `value_type` |
+|---|---|
+| bool | numeric unsigned |
+| unsigned | numeric unsigned |
+| float | numeric float |
+| text | text |
+| char | character |
+| log | log |
+
+All items are created as **Trapper items**.
+
+### Worker model
+
+The benchmarker splits the configured host list across sender workers. Each worker repeatedly sends batches for the subset of hosts assigned to it.
+
+This means:
+
+- `-senders` increases concurrency
+- the load is host-slice based, not a global queue of independent packets
+- per-worker stats can reveal imbalance or bottlenecks
+
+### Batch sizing
+
+Two settings affect packet composition:
+
+- `-batch-hosts`
+- `-batch-metrics`
+
+The effective batch size starts from `-batch-hosts`, then is reduced when `-batch-metrics` would otherwise be exceeded.
 
 Example:
 
-```bash
-# Parse results with jq
-cat results.json | jq '.throughput_vps, .p95_latency_ms, .errors_by_type'
-```
+- `-batch-hosts 50`
+- `-metrics-per-host 200`
+- `-batch-metrics 5000`
+
+In that case, only `5000 / 200 = 25` hosts fit into a packet, so the effective batch becomes 25 hosts.
+
+### Rate control
+
+- `-rate 0` means flood mode
+- any positive `-rate` uses a ticker in each worker
+
+The current implementation is best understood as a **worker-level send cadence**, not a strict global traffic shaper.
 
 ---
 
-## Quick start examples
+## Quick examples
 
-### 30-second quick test
+### Small validation run
 
 ```bash
 ./zabbix-bench \
   -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
-  -user "Admin" -pass "zabbix" \
-  -hosts 20 -senders 10 -batch-hosts 20 \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Validation" \
+  -hosts 10 \
+  -senders 4 \
   -duration 30s
 ```
 
-### High-volume stress test (500 metrics per host)
+### Token-based run
 
 ```bash
+export ZABBIX_API_KEY="your-token"
 ./zabbix-bench \
-  -api-url "http://your-zabbix-server/api_jsonrpc.php" \
-  -user "Admin" -pass "zabbix" \
-  -hosts 100 -senders 50 -metrics-per-host 500 \
-  -batch-hosts 100 -rate 0 -duration 5m
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -group "Benchmark-Group-Token" \
+  -hosts 20 \
+  -senders 10 \
+  -duration 1m
 ```
 
-### Full saturation test (500 hosts, 2 minutes)
+### High metric density run
 
 ```bash
 ./zabbix-bench \
   -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
-  -hosts 500 -senders 50 -batch-hosts 50 \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-HeavyItems" \
+  -hosts 100 \
+  -senders 40 \
+  -metrics-per-host 500 \
+  -batch-hosts 100 \
+  -batch-metrics 5000 \
+  -duration 5m
+```
+
+### Reuse existing hosts
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Reuse" \
+  -prefix "bench-" \
+  -hosts 100 \
+  -senders 20 \
+  -skip-setup \
   -duration 2m
 ```
 
-### Re-run without recreating hosts
+Use that only when:
+
+- the expected hosts already exist
+- they follow the same prefix and numbering scheme
+- they already have matching Trapper items
+
+### Export JSON results
 
 ```bash
 ./zabbix-bench \
   -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
-  -hosts 500 -senders 50 -batch-hosts 50 \
-  -skip-setup -duration 2m
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Json" \
+  -hosts 20 \
+  -duration 30s \
+  -output-json results.json
 ```
 
-### Use env var for password
+---
+
+## Output and result interpretation
+
+The console summary includes:
+
+- hosts tested
+- total host sends
+- total values
+- total packets
+- error count and error rate
+- average, minimum, maximum, and percentile latencies
+- per-worker packet, host, and error summaries
+
+### What the terms mean
+
+- **Hosts tested**: number of hostnames assigned to the benchmark run
+- **Total host sends**: total successful host-batch placements across all packets
+- **Total values**: `total host sends × metrics per host`
+- **Total packets**: successful packet sends only
+- **Throughput (VPS)**: total values divided by elapsed runtime
+- **Latency**: end-to-end packet send and response time for successful sends
+- **P50 / P95 / P99**: packet latency percentiles
+
+### Important caveat on latency samples
+
+Latency percentiles are calculated from sampled successful packet latencies, with an in-memory cap on the stored sample count. That is usually fine for benchmarking, but it is still sampling, not an infinite full-history ledger.
+
+### JSON output structure
+
+The JSON export includes:
+
+- global totals
+- latency percentiles
+- categorized error counts
+- per-worker stats
+- a small config block used for the run
+
+That makes it suitable for:
+
+- comparing runs over time
+- loading results into dashboards
+- regression checks after tuning changes
+
+---
+
+## Tuning guidance
+
+These are practical heuristics for driving different kinds of pressure.
+
+| Goal | What to change |
+|---|---|
+| Increase raw ingest pressure | Raise `-senders`, `-batch-hosts`, or `-metrics-per-host` |
+| Keep packet size under control | Lower `-batch-hosts` or `-batch-metrics` |
+| Stress database writes | Raise `-metrics-per-host` significantly |
+| Repeat runs without setup cost | Use `-skip-setup` only when hosts/items already exist |
+| Avoid hammering the server too hard | Use a positive `-rate` instead of flood mode |
+| Keep benchmark artifacts for inspection | Add `-keep-hosts` |
+| Make comparisons easier | Export JSON and keep test parameters stable |
+
+Suggested workflow:
+
+1. start with 10 hosts and a short duration
+2. confirm connectivity and cleanup behavior
+3. increase `-senders`
+4. increase `-metrics-per-host`
+5. watch latency and Zabbix internal health in parallel
+
+---
+
+## Monitoring Zabbix during a run
+
+The client-side numbers are useful, but they are only half the story. While benchmarking, also watch the Zabbix server itself.
+
+Things worth monitoring:
+
+- values processed per second
+- queue size
+- history syncer utilization
+- preprocessing utilization
+- write cache and history cache usage
+- database pressure and disk latency
+
+Example command:
 
 ```bash
-export ZABBIX_PASS="my-secret"
-./zabbix-bench -api-url "http://127.0.0.1:8080/api_jsonrpc.php" -hosts 20 -duration 30s
-```
-
----
-
-## Items created per host
-
-Items are dynamically created based on `-metrics-per-host` (default: 6). The metric types cycle through:
-
-| Cycle position | Type      | Zabbix value_type       | Example key                |
-|----------------|-----------|-------------------------|----------------------------|
-| 0              | Boolean   | 3 -- Numeric (unsigned) | `test.metric.0.bool`       |
-| 1              | Unsigned  | 3 -- Numeric (unsigned) | `test.metric.1.unsigned`   |
-| 2              | Float     | 0 -- Numeric (float)    | `test.metric.2.float`      |
-| 3              | Text      | 4 -- Text               | `test.metric.3.text`       |
-| 4              | Character | 1 -- Character          | `test.metric.4.char`       |
-| 5              | Log       | 2 -- Log                | `test.metric.5.log`        |
-
-With `-metrics-per-host 12`, items 6-11 repeat the same cycle (test.metric.6.bool, test.metric.7.unsigned, ...).
-
-All items use Zabbix Trapper type (type=2), meaning they only accept pushed data with no polling overhead.
-
----
-
-## Tuning tips
-
-| Goal                     | Action                                                        |
-|--------------------------|---------------------------------------------------------------|
-| Max raw VPS              | Increase `-senders`, `-batch-hosts`, and `-metrics-per-host`  |
-| Cap payload size         | Use `-batch-metrics` to limit metrics per packet              |
-| Find DB bottleneck       | Watch Zabbix internal queue via `zabbix_server -R diaginfo`   |
-| Reduce setup time        | Lower `-hosts` or use `-skip-setup` on repeat runs            |
-| Keep data for inspection | Add `-keep-hosts` flag                                        |
-| Avoid saturating prod    | Use `-rate N` instead of `-rate 0` to cap the send rate       |
-| Test heavy item load     | Use `-metrics-per-host 500` to stress database writes         |
-
-Use Ctrl+C or `kill <pid>` (SIGTERM) to stop. The tool cleans up hosts automatically. Avoid `kill -9` as it skips cleanup.
-
----
-
-## Example benchmark results
-
-Results from a Zabbix 7.0 instance on Docker (localhost:8080) with TimescaleDB.
-
-### 30-second test (10 hosts, 4 senders, flood mode)
-
-```text
-Hosts: 10 | Senders: 4 | Batch: 50 | Flood: true | Duration: 30s
-
-╔═════════════════════════════════════════════════════════╗
-║               BENCHMARK SUMMARY REPORT                  ║
-╠═════════════════════════════════════════════════════════╣
-║ Hosts tested:        10                                 ║
-║ Total host sends:    327161                             ║
-║ Total values:        1962966                            ║
-║ Total packets:       137121                             ║
-║ Errors:              0 (0.0%)                           ║
-╠═════════════════════════════════════════════════════════╣
-║ Throughput (VPS):    63501.22                           ║
-║ Avg latency:         0 ms                               ║
-║ Min latency:         0 ms                               ║
-║ Max latency:         1001 ms                            ║
-║ P50 latency:         0 ms                               ║
-║ P95 latency:         0 ms                               ║
-║ P99 latency:         1 ms                               ║
-╠═════════════════════════════════════════════════════════╣
-║ Per-worker statistics:                                  ║
-║   W0: 31638 pkts, 94914 hosts, 0 err, 18423 VPS         ║
-║   W1: 31708 pkts, 95124 hosts, 0 err, 18463 VPS         ║
-║   W2: 31674 pkts, 95022 hosts, 0 err, 18444 VPS         ║
-║   W3: 42101 pkts, 42101 hosts, 0 err, 8172 VPS          ║
-╠═════════════════════════════════════════════════════════╣
-╚═════════════════════════════════════════════════════════╝
-```
-
-### 5-minute stress test (100 hosts, 200 senders, 600 metrics/host)
-
-```text
-Hosts: 100 | Senders: 200 | Metrics/host: 600 | Flood: true | Duration: 5m
-
-Sustained VPS:       115,843
-Peak VPS:            566,020
-Total values:        34,819,200
-Total packets:       58,032
-P50 latency:         246 ms
-P95 latency:         1,413 ms
-P99 latency:         1,667 ms
-Errors:              0 (0.0%)
-```
-
-With 600 metrics per host (60,000 metrics per batch), the database becomes the bottleneck. Initial burst hits 566k VPS, then stabilizes around 115k sustained as the server catches up. All 100 workers distributed load evenly (~580 packets each). Zero errors across the full 5-minute run.
-
-### Bottlenecks found via Zabbix internal API
-
-| Process        | Before    | Peak busy % | After |
-|----------------|-----------|-------------|-------|
-| Trapper        | 5 workers | 98.45%      | 50    |
-| History Syncer | 4 workers | 75.05%      | 20    |
-| Write Cache    | 64M       | 99.29% full | 1G    |
-
-### Optimized .env (Zabbix Server)
-
-```dotenv
-# Cache sizes
-ZBX_CACHESIZE=256M
-ZBX_HISTORYCACHESIZE=1G
-ZBX_HISTORYINDEXCACHESIZE=128M
-ZBX_TRENDCACHESIZE=64M
-ZBX_TRENDCACHEFUNCTIONSIZE=32M
-ZBX_VALUECACHESIZE=128M
-
-# Process counts
-ZBX_STARTPOLLERS=10
-ZBX_STARTPOLLERSUNREACHABLE=5
-ZBX_STARTPREPROCESSORS=12
-ZBX_STARTTRAPPERS=50
-ZBX_STARTHISTORYSYNCERS=20
-ZBX_STARTPINGERS=4
-ZBX_STARTDISCOVERERS=2
-ZBX_STARTHTTPPOLLERS=2
-ZBX_STARTSNMPTRAPPER=1
-ZBX_STARTVMWARECOLLECTORS=0
-ZBX_STARTJAVAPOLLERS=5
-ZBX_TIMEOUT=10
-ZBX_LOGSLOWQUERIES=3000
-```
-
-Apply with:
-
-```bash
-docker compose -f /opt/docker/zabbix/docker-compose.yaml --env-file /opt/docker/zabbix/.env up -d zabbix-server
-```
-
----
-
-## Monitoring Zabbix during benchmarks
-
-While running zabbix-bench, monitor these Zabbix internal metrics to identify bottlenecks:
-
-### Key metrics to watch
-
-**Values processed per second** -- Shows actual throughput at server (not client-side estimate). Watch for plateaus indicating saturation.
-
-**Internal process utilization** -- History Syncer writes values to database. Preprocessing handles item preprocessing. Watch for sustained >75% and increase worker count.
-
-**Cache usage** -- History Cache for temporary storage, Write Cache for batched database writes. Flat line at 100% means values are being dropped.
-
-**Queue size** -- Items waiting to be processed. Should remain near zero. Rising queue means the backend cannot keep up.
-
-### How to monitor
-
-```bash
-# Get diagnostics
-zabbix_server -R diaginfo
-
-# Monitor in parallel terminal during benchmark
 watch -n 5 'zabbix_server -R diaginfo | grep -E "Queue|Cache|busy"'
 ```
 
+If client-side throughput stays high but queue or cache pressure rises, the backend may be the real bottleneck.
+
 ---
 
-## Dependencies
+## Troubleshooting
 
-- <https://github.com/kgeroczi/go-zabbix-api> -- Zabbix API client
-- <https://github.com/chmller/go-zabbix-sender> -- Zabbix Trapper sender
+### Connection refused to the Trapper
+
+Example:
+
+```text
+dial tcp 127.0.0.1:10051: connect: connection refused
+```
+
+Check:
+
+- the Zabbix server or proxy is listening on the expected Trapper port
+- `-trapper-addr` points to the correct host and port
+- firewalls are not blocking the connection
+
+### API authentication fails
+
+Example:
+
+```text
+error logging into Zabbix API: invalid username or password
+```
+
+Check:
+
+- the API URL ends with `api_jsonrpc.php`
+- the account has API access
+- `ZABBIX_PASS` is not shadowing what you expect
+- the API token is valid if using `-api-key` or `ZABBIX_API_KEY`
+
+### Setup succeeds only partially
+
+If the setup phase reports fewer ready hosts than requested, some host or item creations likely failed. Review the warnings in the setup logs.
+
+### `-skip-setup` behaves oddly
+
+Remember that `-skip-setup` assumes predictable hostnames and existing Trapper items. It does not create missing items and does not verify each host one by one before sending.
+
+### Error rate grows under load
+
+Likely causes:
+
+- Trapper saturation
+- network timeout
+- database backpressure causing server-side rejection or slow response
+- packets too large for the target environment
+
+Things to try:
+
+- lower `-senders`
+- lower `-metrics-per-host`
+- lower `-batch-hosts`
+- lower `-batch-metrics`
+- switch from flood mode to a positive `-rate`
+
+### Very low or zero-looking average latency
+
+The tool records latency in milliseconds, so very fast local runs may show a lot of `0 ms` packet times. That does not mean the run is broken; it means the measured packet round-trip fell below 1 ms often enough to round down.
+
+---
+
+## Known caveats
+
+- The setup phase creates a dummy host interface even though the benchmark uses Trapper items.
+- Cleanup works at the **group** level, not only from the in-memory list of just-created hosts, if the group lookup succeeds.
+- Trapper address auto-detection assumes the API host is also the Trapper host.
+- Packet latency percentiles are based on successful sends only.
+- The progress log reports values per second from successful host sends, not from attempted sends.
+
+---
+
+## Example workflow for repeatable testing
+
+A practical pattern for structured benchmark work:
+
+1. create a unique group name for each test family
+2. run a 30-second validation benchmark
+3. export JSON
+4. tune Zabbix
+5. rerun with identical parameters
+6. compare throughput, P95, P99, and error rate
+7. only then increase pressure
+
+Example pair of runs:
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-Before" \
+  -hosts 50 \
+  -senders 20 \
+  -metrics-per-host 50 \
+  -duration 2m \
+  -output-json before.json
+```
+
+```bash
+./zabbix-bench \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix" \
+  -group "Benchmark-Group-After" \
+  -hosts 50 \
+  -senders 20 \
+  -metrics-per-host 50 \
+  -duration 2m \
+  -output-json after.json
+```
+
+---
+
+## Development notes
+
+If you modify the benchmarker, keep docs aligned with these implementation details:
+
+- YAML key names vs CLI flag names
+- cleanup scope
+- batch size calculation
+- metric type cycle and item generation
+- rate semantics
+- JSON output structure
+
+For this project, README accuracy matters because users will point it at real Zabbix instances.
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+MIT
