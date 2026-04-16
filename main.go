@@ -358,9 +358,8 @@ func ValidateConfig(cfg Config) ValidationResult {
 
 	// JSON path validation
 	if cfg.OutputJSON != "" {
-		dir := os.Args[0] // fallback
 		if idx := strings.LastIndex(cfg.OutputJSON, "/"); idx >= 0 {
-			dir = cfg.OutputJSON[:idx]
+			dir := cfg.OutputJSON[:idx]
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				res.Errors = append(res.Errors, fmt.Sprintf("parent directory for output_json does not exist: %s", dir))
 			}
@@ -666,7 +665,7 @@ func main() {
 			fmt.Println("   (Check firewall, port, and trapper address)")
 			os.Exit(1)
 		}
-		conn.Close()
+		_ = conn.Close()
 		fmt.Println("✅ Trapper Connectivity: SUCCESS")
 
 		fmt.Println("\n✨ Pre-flight checks passed successfully.")
