@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.4.0] - 2026-04-12
+## [1.4.1] - 2026-04-16
+ 
+ ### Added
+ 
+ - **Parallel Execution Breakdown**: Renamed the per-worker statistics section for better technical clarity.
+ - **Aligned Worker Metrics**: Worker statistics in the console output are now padded and aligned (e.g., `Worker #00`), improving readability at high sender counts.
+ 
+ ---
+ 
+ ## [1.4.0] - 2026-04-12
 
 ### Added
 
@@ -319,7 +328,8 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
-| 1.4.0 | 2026-04-12 | Stable | Remove pool, add validation, fix naming, YAML duration |
+| 1.4.1 | 2026-04-16 | Stable | Improved worker metrics naming and alignment |
+ | 1.4.0 | 2026-04-12 | Stable | Remove pool, add validation, fix naming, YAML duration |
 | 1.3.4 | 2026-04-11 | Stable | Performance and stability fixes |
 | 1.3.3 | 2026-04-11 | Stable | Bug fixes |
 | 1.3.2 | 2026-04-10 | Stable | Metric-based batching |

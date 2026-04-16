@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.4.0"
+var Version = "1.4.1"
 
 const maxLatencySamples = 1_000_000
 
@@ -921,11 +921,11 @@ func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) 
 	}
 
 	if len(result.WorkerStats) > 0 {
-		boxLine("Per-worker statistics:")
+		boxLine("PARALLEL EXECUTION BREAKDOWN")
 		for _, ws := range result.WorkerStats {
 			if ws.PacketsSent > 0 {
 				workerVPS := float64(ws.HostsSent*int64(metricsPerHost)) / result.Duration
-				boxLine(fmt.Sprintf("  W%d: %d pkts, %d hosts, %d err, %.0f VPS",
+				boxLine(fmt.Sprintf("  Worker #%02d: %d pkts | %d hosts | %d err | %.0f VPS",
 					ws.ID, ws.PacketsSent, ws.HostsSent, ws.ErrorCount, workerVPS))
 			}
 		}

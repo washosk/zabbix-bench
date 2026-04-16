@@ -183,6 +183,9 @@ At the end of the run you will see a summary like this:
 ║ P50 latency:         0 ms                              ║
 ║ P95 latency:         0 ms                              ║
 ║ P99 latency:         1 ms                              ║
+╠═════════════════════════════════════════════════════════╣
+║ PARALLEL EXECUTION BREAKDOWN                            ║
+║   Worker #00: 34280 pkts | 34280 hosts | 0 err | 1109 VPS ║
 ╚═════════════════════════════════════════════════════════╝
 ```
 
