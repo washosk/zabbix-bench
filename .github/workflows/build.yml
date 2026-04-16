@@ -7,42 +7,44 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         go-version: ['1.24', '1.23']
 
     steps:
-    - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v5
 
-    - name: Set up Go
-      uses: actions/setup-go@v5.3.0
-      with:
-        go-version: ${{ matrix.go-version }}
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: false
 
-    - name: Check Go formatting
-      run: |
-        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-          echo "Go files not formatted:"
-          gofmt -s -d .
-          exit 1
-        fi
+      - name: Check Go formatting
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Go files not formatted:"
+            gofmt -s -d .
+            exit 1
+          fi
 
-    - name: Run go vet
-      run: go vet ./...
+      - name: Run go vet
+        run: go vet ./...
 
-    - name: Run go mod tidy
-      run: go mod tidy && git diff --exit-code
+      - name: Run go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code
 
   build:
     runs-on: ${{ matrix.os }}
     needs: test
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -67,28 +69,30 @@ jobs:
             output: zabbix-bench.exe
 
     steps:
-    - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v5
 
-    - name: Set up Go
-      uses: actions/setup-go@v5.3.0
-      with:
-        go-version: '1.24'
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+          cache: false
 
-    - name: Build
-      shell: bash
-      run: |
-        mkdir -p dist
-        go build -o dist/${{ matrix.output }} main.go
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
+      - name: Build
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -o dist/${{ matrix.output }} main.go
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4.6.2
-      with:
-        name: zabbix-bench-${{ matrix.goos }}-${{ matrix.goarch }}
-        path: dist/${{ matrix.output }}
-        retention-days: 7
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zabbix-bench-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/${{ matrix.output }}
+          retention-days: 7
+          if-no-files-found: error
 
   release:
     runs-on: ubuntu-latest
@@ -98,36 +102,37 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v5
 
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4.2.1
-      with:
-        path: dist
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
 
-    - name: Flatten artifact structure
-      run: |
-        mkdir -p release
-        for dir in dist/zabbix-bench-*/; do
-          artifact_name=$(basename "$dir")
-          file=$(find "$dir" -type f | head -1)
-          if [[ "$file" == *.exe ]]; then
-            cp "$file" "release/${artifact_name}.exe"
-          else
-            cp "$file" "release/${artifact_name}"
-          fi
-        done
-        ls -la release/
+      - name: Flatten artifact structure
+        shell: bash
+        run: |
+          mkdir -p release
+          for dir in dist/zabbix-bench-*/; do
+            artifact_name=$(basename "$dir")
+            file=$(find "$dir" -type f | head -1)
+            if [[ "$file" == *.exe ]]; then
+              cp "$file" "release/${artifact_name}.exe"
+            else
+              cp "$file" "release/${artifact_name}"
+            fi
+          done
+          ls -la release/
 
-    - name: Create checksums
-      run: |
-        cd release
-        sha256sum * > SHA256SUMS
-        cat SHA256SUMS
+      - name: Create checksums
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: release/*
-        draft: false
-        prerelease: false
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          draft: false
+          prerelease: false
