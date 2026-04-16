@@ -187,7 +187,7 @@ services:
       -duration 10m
       -output-json /results/benchmark.json
     volumes:
-      - ./results:/results
+- ./results:/results
 ```
 
 Users run with:

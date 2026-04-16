@@ -8,15 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [1.4.1] - 2026-04-16
- 
- ### Added
- 
- - **Parallel Execution Breakdown**: Renamed the per-worker statistics section for better technical clarity.
- - **Aligned Worker Metrics**: Worker statistics in the console output are now padded and aligned (e.g., `Worker #00`), improving readability at high sender counts.
- 
- ---
- 
- ## [1.4.0] - 2026-04-12
+
+### Added
+
+- **Parallel Execution Breakdown**: Renamed the per-worker statistics section for better technical clarity.
+- **Aligned Worker Metrics**: Worker statistics in the console output are now padded and aligned (e.g., `Worker #00`), improving readability at high sender counts.
+
+---
+
+## [1.4.0] - 2026-04-12
 
 ### Added
 
@@ -245,10 +245,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Monitoring guide for Zabbix internal metrics
 - MIT license
 - GitHub Actions CI/CD workflows
-  - Automated testing on Go 1.23 & 1.24
-  - Multi-platform builds (Linux, macOS, Windows)
-  - Linting and code quality checks
-  - Documentation validation
+- Automated testing on Go 1.23 & 1.24
+- Multi-platform builds (Linux, macOS, Windows)
+- Linting and code quality checks
+- Documentation validation
 - Distribution guides for package managers
 - Contributing guidelines
 

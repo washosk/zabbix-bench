@@ -25,19 +25,19 @@ This makes it useful for:
 A normal run has three phases:
 
 1. **Setup**
-   - logs into the Zabbix API using either username/password or an API token
-   - ensures the configured host group exists
-   - creates hosts named from the configured prefix and a zero-padded sequence, for example `bench-0001`
-   - creates Trapper items on each host
+- logs into the Zabbix API using either username/password or an API token
+- ensures the configured host group exists
+- creates hosts named from the configured prefix and a zero-padded sequence, for example `bench-0001`
+- creates Trapper items on each host
 
 2. **Benchmark**
-   - splits the configured hosts across concurrent sender workers
-   - generates metric values in memory
-   - sends bulk packets to the Zabbix Trapper either as fast as possible or at a fixed rate
-   - tracks packet latency, throughput, and categorized errors
+- splits the configured hosts across concurrent sender workers
+- generates metric values in memory
+- sends bulk packets to the Zabbix Trapper either as fast as possible or at a fixed rate
+- tracks packet latency, throughput, and categorized errors
 
 3. **Cleanup**
-   - unless `-keep-hosts` is set, deletes hosts in the benchmark group and then deletes the group itself
+- unless `-keep-hosts` is set, deletes hosts in the benchmark group and then deletes the group itself
 
 That last point matters: cleanup is intentionally aggressive.
 

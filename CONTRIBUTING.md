@@ -205,20 +205,20 @@ Describe:
 ## Review Process
 
 1. **Automatic checks:**
-   - CI/CD workflows pass
-   - Code is formatted
-   - No lint errors
+- CI/CD workflows pass
+- Code is formatted
+- No lint errors
 
 2. **Maintainer review:**
-   - Code quality
-   - Performance impact
-   - Documentation completeness
-   - Test coverage
+- Code quality
+- Performance impact
+- Documentation completeness
+- Test coverage
 
 3. **Merge:**
-   - All checks pass
-   - At least one approval
-   - PR is up to date with main
+- All checks pass
+- At least one approval
+- PR is up to date with main
 
 ---
 
@@ -233,13 +233,13 @@ Releases follow semantic versioning (major.minor.patch).
 3. Tag commit: `git tag vX.Y.Z`
 4. Push tag: `git push origin vX.Y.Z`
 5. GitHub Actions automatically:
-   - Builds for all platforms
-   - Creates release
-   - Updates Docker image
+- Builds for all platforms
+- Creates release
+- Updates Docker image
 6. Manually update:
-   - Homebrew formula
-   - AUR PKGBUILD
-   - Distribution docs
+- Homebrew formula
+- AUR PKGBUILD
+- Distribution docs
 
 ---
 

@@ -28,8 +28,8 @@ You need all of the following:
 - a reachable Zabbix API URL
 - network access to the Zabbix Trapper port, usually `10051`
 - either:
-  - a Zabbix username and password, or
-  - a Zabbix API token
+- a Zabbix username and password, or
+- a Zabbix API token
 
 Typical API URL format:
 
