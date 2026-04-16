@@ -1,18 +1,16 @@
-# zabbix-bench
+# zabbix-bench: High-Performance Zabbix Benchmarking & Stress Testing
 
 [![Build & Test](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml)
 [![Lint & Code Quality](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml)
 
-`zabbix-bench` is a Go-based benchmark tool for measuring Zabbix ingest throughput through the Trapper path.
+`zabbix-bench` is a high-performance Zabbix benchmarking tool and load generator designed to measure ingest throughput and performance through the Zabbix Trapper path. It provides a structured way to perform stress testing and capacity planning for your Zabbix 7.0+ monitoring environment.
 
-Built for repeatable NVPS-style benchmarking and lifecycle testing. In a single run it can:
+Built for repeatable **NVPS (New Values Per Second)** benchmarking, the tool automates the entire benchmark lifecycle. In a single run, it can:
 
-- create a benchmark host group
-- create benchmark hosts and Trapper items through the Zabbix API
-- send bulk metric packets to the Zabbix Trapper
-- report throughput, latency percentiles, per-worker stats, and error breakdowns
-- export results as JSON
-- remove benchmark resources after the run
+- **Automated Setup**: Create benchmark host groups, hosts, and Trapper items via the Zabbix API.
+- **Stress Testing**: Send bulk high-volume metric packets to the Zabbix Trapper.
+- **Performance Analytics**: Report real-time throughput, latency percentiles (P50/P95/P99), and per-worker stats.
+- **Export & Cleanup**: Export full benchmark results to JSON and remove all temporary benchmark resources.
 
 Also useful for:
 
@@ -69,33 +67,29 @@ Recommended first practice:
 
 ## Features
 
-- Configurable host count, sender count, and metric count per host
-- Six metric types cycled per host: boolean, unsigned, float, text, character, log
-- Flood mode with `-rate 0`
-- Bulk Trapper packets using host-based batching
-- Metric-count cap with `-batch-metrics`
-- Auto-creation of hosts and items through the Zabbix API
-- Graceful stop on Ctrl+C or SIGTERM
-- Latency tracking with P50, P95, and P99 percentiles
-- Per-worker packet, host, latency, and error statistics
-- Error categorization: timeout, closed connection, network, other
-- JSON export for later analysis
-- YAML configuration file support
-- Username/password authentication or API token authentication
-- Automatic Trapper address detection from API URL when possible
+- **Scalable Load Generation**: Configurable host count, sender count, and metric density per host.
+- **Diverse Data Simulation**: Six metric types cycled per host (Boolean, Unsigned, Float, Text, Character, Log).
+- **Flood Mode**: High-volume pressure testing with `-rate 0`.
+- **Intelligent Batching**: Bulk Trapper packets with host-based and metric-count batching for protocol efficiency.
+- **Automated Lifecycle**: Zero-touch creation and removal of benchmark hosts/items via Zabbix API.
+- **Real-time Performance Metrics**: Latency tracking with P50, P95, and P99 percentiles (O(1) efficiency).
+- **Detailed Analytics**: Per-worker statistics including throughput (VPS), packet counts, and latency.
+- **Advanced Error Tracking**: Categorized network and trap errors (timeouts, connection resets, etc.).
+- **Extensible Export**: JSON results for integration with Grafana or other analysis dashboards.
+- **Zabbix 7.0+ Ready**: Native support for API Token authentication and modern Zabbix API schemas.
 
 ---
 
 ## Requirements
 
-To use the tool successfully you need:
+To use `zabbix-bench` for performance testing, you need:
 
-- a reachable Zabbix API endpoint
-- network access to the Zabbix Trapper port, usually `10051`
-- API credentials with enough permissions to create and delete host groups, hosts, and items
-- Go 1.24+ only if you plan to build from source
+- **Zabbix Environment**: A reachable Zabbix 7.0+ API endpoint.
+- **Trapper Access**: Network access to the Zabbix Trapper port (default `10051`).
+- **Permissions**: API credentials with permissions to manage host groups, hosts, and items.
+- **Build Tools**: Go 1.24+ (only if building from the source code).
 
-The tool is intended for Zabbix environments that support API token auth or normal API login.
+The tool is optimized for modern Zabbix deployments using API tokens for secure, high-performance authentication.
 
 ---
 
