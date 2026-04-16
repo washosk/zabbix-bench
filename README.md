@@ -3,7 +3,6 @@
 [![Build & Test](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml)
 [![Lint & Code Quality](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml)
 
-
 `zabbix-bench` is a Go-based benchmark tool for measuring Zabbix ingest throughput through the Trapper path.
 
 It is designed for repeatable NVPS-style benchmarking and lifecycle testing. In a single run it can:
@@ -29,18 +28,21 @@ This makes it useful for:
 A normal run has three phases:
 
 1. **Setup**
+
 - logs into the Zabbix API using either username/password or an API token
 - ensures the configured host group exists
 - creates hosts named from the configured prefix and a zero-padded sequence, for example `bench-0001`
 - creates Trapper items on each host
 
-2. **Benchmark**
+1. **Benchmark**
+
 - splits the configured hosts across concurrent sender workers
 - generates metric values in memory
 - sends bulk packets to the Zabbix Trapper either as fast as possible or at a fixed rate
 - tracks packet latency, throughput, and categorized errors
 
-3. **Cleanup**
+1. **Cleanup**
+
 - unless `-keep-hosts` is set, deletes hosts in the benchmark group and then deletes the group itself
 
 That last point matters: cleanup is intentionally aggressive.
@@ -139,7 +141,7 @@ go build -o zabbix-bench main.go
 ### Flags
 
 | Flag | Meaning | Default |
-|---|---|---|
+| --- | --- | --- |
 | `-api-url` | Zabbix API URL | `http://localhost/zabbix/api_jsonrpc.php` |
 | `-user` | Zabbix username | `Admin` |
 | `-pass` | Zabbix password. If omitted, uses `ZABBIX_PASS`, then falls back to `zabbix` | none at flag level |
@@ -164,7 +166,7 @@ go build -o zabbix-bench main.go
 ### Environment variables
 
 | Variable | Meaning |
-|---|---|
+| --- | --- |
 | `ZABBIX_API_KEY` | API token used when `-api-key` is not provided |
 | `ZABBIX_PASS` | Password used when `-pass` is not provided |
 
@@ -333,7 +335,7 @@ test.metric.7.unsigned
 ### Item types created
 
 | Metric type | Zabbix `value_type` |
-|---|---|
+| --- | --- |
 | bool | numeric unsigned |
 | unsigned | numeric unsigned |
 | float | numeric float |
@@ -507,7 +509,7 @@ That makes it suitable for:
 These are practical heuristics for driving different kinds of pressure.
 
 | Goal | What to change |
-|---|---|
+| --- | --- |
 | Increase raw ingest pressure | Raise `-senders`, `-batch-hosts`, or `-metrics-per-host` |
 | Keep packet size under control | Lower `-batch-hosts` or `-batch-metrics` |
 | Stress database writes | Raise `-metrics-per-host` significantly |
