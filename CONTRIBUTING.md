@@ -59,7 +59,7 @@ git checkout -b feature/your-feature-name
 
 ```bash
 go test ./...
-go build main.go && ./zabbix-bench --help
+go build main.go && ./zabbix-bench -validate-only -api-url "your-url"
 ```
 
 ### Commit messages
@@ -269,13 +269,14 @@ GOOS=windows GOARCH=amd64 go build -o zabbix-bench-windows-amd64.exe
 ```bash
 # Assuming Zabbix is running on localhost:8080
 ./zabbix-bench \
+  -profile light \
   -api-url "http://localhost:8080/api_jsonrpc.php" \
   -user "Admin" -pass "zabbix" \
-  -hosts 10 -duration 30s \
+  -duration 30s \
   -output-json /tmp/result.json
 
 # View results
-cat /tmp/result.json | jq '.p95_latency_ms, .worker_stats'
+cat /tmp/result.json | jq '.global_totals.throughput_vps, .worker_stats'
 ```
 
 ### Debug performance issues

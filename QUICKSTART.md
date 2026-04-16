@@ -19,6 +19,14 @@ A standard run can:
 
 That means you should use a **dedicated benchmark group name**.
 
+### Safety First: Dry Run
+
+Before making any changes to your Zabbix server, you can use `--dry-run` to preview exactly what the tool will do. This resolves all parameters and validates your configuration without any network impact.
+
+```bash
+./zabbix-bench -profile light -dry-run -api-url "http://zabbix/api_jsonrpc.php"
+```
+
 ---
 
 ## What you need
@@ -57,6 +65,29 @@ cd zabbix-bench
 go mod tidy
 go build -o zabbix-bench main.go
 ./zabbix-bench --help
+```
+
+---
+
+## Recommended: Fast-track with Profiles
+
+The easiest way to start is with a built-in profile. Profiles provide sane defaults for hosts, senders, and rates.
+
+| Profile | Hosts | Senders | Use Case |
+| --- | --- | --- | --- |
+| `light` | 5 | 2 | Local sanity checks / low-impact validation |
+| `balanced` | 25 | 10 | Standard throughput and latency testing |
+| `flood` | 100 | 50 | Intensive pressure and stress testing |
+
+Example: Run a light 30-second benchmark on localhost:
+
+```bash
+./zabbix-bench \
+  -profile light \
+  -duration 30s \
+  -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
+  -user "Admin" \
+  -pass "zabbix"
 ```
 
 ---
@@ -147,6 +178,8 @@ metrics_per_host: 6
 duration: "30s"
 skip_setup: false
 keep_hosts: true
+output_json: "results.json"
+profile: "light"
 ```
 
 Run it:

@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.4.1"
+var Version = "1.5.0"
 
 const maxLatencySamples = 1_000_000
 

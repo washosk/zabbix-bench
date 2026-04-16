@@ -82,8 +82,8 @@ func TestBuildRuntimePlan(t *testing.T) {
 	if plan.AuthMode != "API Token" {
 		t.Errorf("expected AuthMode 'API Token', got %q", plan.AuthMode)
 	}
-	if plan.TrapperAddr != "zabbix.example.com:10051 (inferred)" {
-		t.Errorf("expected inferred trapper addr, got %q", plan.TrapperAddr)
+	if plan.TrapperAddrLabel != "zabbix.example.com:10051 (inferred)" {
+		t.Errorf("expected inferred trapper addr label, got %q", plan.TrapperAddrLabel)
 	}
 	if plan.EffectiveBatchSize != 50 {
 		t.Errorf("expected BatchSize 50, got %d", plan.EffectiveBatchSize)

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2026-04-16
+
+### Added
+
+- **Performance Profiles**: Introduced `--profile` (`light`, `balanced`, `flood`) for rapid testing with sensible defaults.
+- **Dry Run Mode**: New `--dry-run` flag to preview execution plans and inferred parameters without making network changes.
+- **Validate-Only Mode**: New `--validate-only` flag to perform active API and Trapper connectivity pre-flight checks.
+- **Startup Summary Reports**: High-visibility console reports providing full transparency of the runtime plan before benchmark execution.
+- **Centralized Validation Engine**: Robust pre-flight configuration checks for numeric sanity, auth validity, and operational safety.
+
+### Fixed
+
+- **Config Precedence**: Ensured consistent merging where CLI flags correctly override YAML and Profile values.
+- **Trapper Address Labels**: Fixed a parsing issue where display labels (e.g., "(default)") interfered with network dialing.
+
+---
+
 ## [1.4.1] - 2026-04-16
 
 ### Added
