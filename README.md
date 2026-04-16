@@ -1,5 +1,9 @@
 # zabbix-bench
 
+[![Build & Test](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml)
+[![Lint & Code Quality](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml)
+
+
 `zabbix-bench` is a Go-based benchmark tool for measuring Zabbix ingest throughput through the Trapper path.
 
 It is designed for repeatable NVPS-style benchmarking and lifecycle testing. In a single run it can:
