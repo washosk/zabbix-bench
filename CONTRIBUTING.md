@@ -79,9 +79,9 @@ Fixes #123
 ### Pull request process
 
 1. Update documentation (README, DISTRIBUTION.md, etc.)
-2. Ensure CI/CD workflows pass
-3. Request review from maintainers
-4. Address feedback
+1. Ensure CI/CD workflows pass
+1. Request review from maintainers
+1. Address feedback
 
 ---
 
@@ -205,17 +205,20 @@ Describe:
 ## Review Process
 
 1. **Automatic checks:**
+
 - CI/CD workflows pass
 - Code is formatted
 - No lint errors
 
-2. **Maintainer review:**
+1. **Maintainer review:**
+
 - Code quality
 - Performance impact
 - Documentation completeness
 - Test coverage
 
-3. **Merge:**
+1. **Merge:**
+
 - All checks pass
 - At least one approval
 - PR is up to date with main
@@ -229,14 +232,17 @@ Releases follow semantic versioning (major.minor.patch).
 ### Steps
 
 1. Update version in comments/docs
-2. Update CHANGELOG.md
-3. Tag commit: `git tag vX.Y.Z`
-4. Push tag: `git push origin vX.Y.Z`
-5. GitHub Actions automatically:
+1. Update CHANGELOG.md
+1. Tag commit: `git tag vX.Y.Z`
+1. Push tag: `git push origin vX.Y.Z`
+1. GitHub Actions automatically:
+
 - Builds for all platforms
 - Creates release
 - Updates Docker image
-6. Manually update:
+
+1. Manually update:
+
 - Homebrew formula
 - AUR PKGBUILD
 - Distribution docs
