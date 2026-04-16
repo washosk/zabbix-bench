@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -20,7 +25,7 @@ jobs:
           cache: false
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --timeout=5m
@@ -33,10 +38,11 @@ jobs:
       - name: Check for security issues with gosec
         uses: securego/gosec@master
         with:
-          args: '-no-fail -fmt sarif -out gosec-report.sarif ./...'
+          args: -no-fail -fmt sarif -out gosec-report.sarif ./...
         continue-on-error: true
 
       - name: Upload Gosec report
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: gosec-report.sarif
