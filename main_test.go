@@ -7,9 +7,9 @@ import (
 
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
-		name     string
-		cfg      Config
-		expectedErrors int
+		name             string
+		cfg              Config
+		expectedErrors   int
 		expectedWarnings int
 	}{
 		{
@@ -130,17 +130,17 @@ func TestApplyProfile(t *testing.T) {
 func TestYAMLOverridePrecedence(t *testing.T) {
 	// This test essentially verifies the logic in main() for merging fileCfg and cfg.
 	// We can't easily test main() directly without reorganization, but we can verify the merging logic.
-	
+
 	fileCfg := Config{NumHosts: 100}
 	cfg := Config{NumHosts: 50} // Default from flag defined value
-	
+
 	explicit := map[string]bool{"hosts": true}
-	
+
 	// Simulation of logic:
 	if !explicit["hosts"] {
 		cfg.NumHosts = fileCfg.NumHosts
 	}
-	
+
 	if cfg.NumHosts != 50 {
 		t.Errorf("Explicit CLI flag should win over YAML, expected 50 got %d", cfg.NumHosts)
 	}
