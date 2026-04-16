@@ -77,6 +77,9 @@ Recommended first practice:
 - **Advanced Error Tracking**: Categorized network and trap errors (timeouts, connection resets, etc.).
 - **Extensible Export**: JSON results for integration with Grafana or other analysis dashboards.
 - **Zabbix 7.0+ Ready**: Native support for API Token authentication and modern Zabbix API schemas.
+- **Operational Safety**: Built-in `--dry-run` to preview execution plans and `--validate-only` for pre-flight connectivity checks.
+- **Performance Profiles**: Preset modes (`light`, `balanced`, `flood`) for rapid testing at different scales.
+- **Dynamic Startup Summary**: High-visibility reports and configuration warnings before every run.
 
 ---
 
@@ -154,6 +157,9 @@ go build -o zabbix-bench main.go
 | `-group` | Host group name | `Benchmark-Group` |
 | `-config` | YAML configuration file | none |
 | `-output-json` | Write benchmark result JSON to a file | none |
+| `-dry-run` | Show execution plan and exit | `false` |
+| `-validate-only` | Perform pre-flight connectivity checks and exit | `false` |
+| `-profile` | Use a benchmarking profile: `light`, `balanced`, `flood` | none |
 | `-version` | Print version and exit | `false` |
 | `-v` | Short form of `-version` | `false` |
 
@@ -204,6 +210,44 @@ export ZABBIX_API_KEY="your-api-token"
 
 ---
 
+## Advanced Usage
+
+### Dry Run
+
+Preview exactly what the tool will do without making any API changes or sending traffic. This is highly recommended when testing a new configuration or CI/CD integration.
+
+```bash
+./zabbix-bench -profile balanced -dry-run -api-url "http://zabbix/api_jsonrpc.php" -api-key "your-token"
+```
+
+### Validation Only
+
+Perform real pre-flight checks to ensure the environment is ready. The tool will:
+1. Log into the Zabbix API.
+2. Verify TCP connectivity to the Zabbix Trapper port.
+3. Report success or detailed failure reasons (e.g., firewall issues, auth failure).
+
+```bash
+./zabbix-bench -validate-only -api-url "http://zabbix/api_jsonrpc.php" -user "Admin" -pass "zabbix"
+```
+
+### Benchmarking Profiles
+
+Profiles provide sensible defaults for common testing scenarios. Explicit CLI flags always override profile values.
+
+| Profile | Hosts | Senders | Rate | Use Case |
+| --- | --- | --- | --- | --- |
+| `light` | 5 | 2 | 1 batch/s | Local sanity checks / low-impact validation |
+| `balanced` | 25 | 10 | flood | Standard throughput and latency testing |
+| `flood` | 100 | 50 | flood | Intensive pressure and stress testing |
+
+Example using a profile with a local override:
+```bash
+./zabbix-bench -profile light -hosts 20 -duration 1m
+```
+
+---
+
 ## Configuration file
 
 You can use a YAML file instead of passing many flags.
@@ -236,6 +280,10 @@ metrics_per_host: 6
 duration: "30s"
 skip_setup: false
 keep_hosts: false
+output_json: "results.json"
+dry_run: false
+validate_only: false
+profile: ""
 ```
 
 Run it like this:
