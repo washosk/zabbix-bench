@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.1] - 2026-04-17
+
+### Fixed
+
+- **Security — Weak RNG Suppression (G404)**: Replaced `//nolint:gosec` with native gosec `// #nosec G404` annotations. GitHub code scanning runs gosec directly, not through golangci-lint, so the previous directives had no effect.
+- **Security — Integer Overflow (G115)**: Eliminated remaining `int → byte` cast in char value generation by indexing into a `const` alphabet string (`benchAlpha[n:n+1]`), removing the numeric conversion entirely.
+
+---
+
 ## [1.6.0] - 2026-04-17
 
 ### Added
@@ -19,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Security — File Permissions (G306)**: JSON output file now written with mode `0600` instead of `0644`.
 - **Security — Path Traversal (G304)**: Config file path sanitized with `filepath.Clean()` before reading.
 - **Security — Integer Overflow (G115)**: Removed unsafe `int(uint(idx) % uint(poolSize))` pattern in worker loop; replaced with direct `idx % poolSize`. Fixed char value cast from `rune` to `byte` to avoid int→int32 truncation.
-- **Code Quality — Weak RNG Annotation (G404)**: Annotated intentional `math/rand` usage in benchmark data generation with `//nolint:gosec` to suppress false-positive security warnings; non-crypto randomness is correct for synthetic metric values.
+- **Code Quality — Weak RNG Annotation (G404)**: Annotated intentional `math/rand` usage in benchmark data generation to suppress false-positive security warnings; non-crypto randomness is correct for synthetic metric values.
 
 ---
 
