@@ -127,6 +127,69 @@ go build -o zabbix-bench main.go
 ./zabbix-bench --help
 ```
 
+### Docker
+
+Build the image (about 6 MB, Go binary on Alpine):
+
+```bash
+git clone https://github.com/washosk/zabbix-bench.git
+cd zabbix-bench
+docker build -t zabbix-bench .
+```
+
+Run a benchmark:
+
+```bash
+docker run --rm zabbix-bench \
+  -api-url http://zabbix.example.com/zabbix/api_jsonrpc.php \
+  -api-key your-token \
+  -hosts 50 \
+  -duration 1m
+```
+
+Pass credentials via environment variable instead of a flag:
+
+```bash
+docker run --rm \
+  -e ZABBIX_API_KEY=your-token \
+  zabbix-bench \
+  -api-url http://zabbix.example.com/zabbix/api_jsonrpc.php \
+  -hosts 50 \
+  -duration 1m
+```
+
+Save JSON results by mounting a local directory:
+
+```bash
+docker run --rm \
+  -e ZABBIX_API_KEY=your-token \
+  -v "$(pwd)/results:/results" \
+  zabbix-bench \
+  -api-url http://zabbix.example.com/zabbix/api_jsonrpc.php \
+  -hosts 50 \
+  -duration 1m \
+  -output-json /results/bench.json
+```
+
+Use a YAML config file:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/benchmark.yaml:/benchmark.yaml:ro" \
+  zabbix-bench -config /benchmark.yaml
+```
+
+If your Zabbix server runs on the Docker host machine, use `--add-host`:
+
+```bash
+docker run --rm --add-host=host.docker.internal:host-gateway \
+  -e ZABBIX_API_KEY=your-token \
+  zabbix-bench \
+  -api-url http://host.docker.internal/zabbix/api_jsonrpc.php \
+  -hosts 50 \
+  -duration 1m
+```
+
 ---
 
 ## Command-line usage

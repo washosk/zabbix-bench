@@ -67,6 +67,30 @@ go build -o zabbix-bench main.go
 ./zabbix-bench --help
 ```
 
+### Option 3: Docker
+
+```bash
+git clone https://github.com/washosk/zabbix-bench.git
+cd zabbix-bench
+docker build -t zabbix-bench .
+docker run --rm zabbix-bench --help
+```
+
+Replace `./zabbix-bench` with `docker run --rm zabbix-bench` in any example below. To save JSON output, mount a results directory:
+
+```bash
+docker run --rm \
+  -e ZABBIX_API_KEY=your-token \
+  -v "$(pwd)/results:/results" \
+  zabbix-bench \
+  -api-url "http://zabbix.example.com/zabbix/api_jsonrpc.php" \
+  -hosts 10 \
+  -duration 30s \
+  -output-json /results/bench.json
+```
+
+If Zabbix runs on the same machine as Docker, add `--add-host=host.docker.internal:host-gateway` and use `host.docker.internal` as the hostname.
+
 ---
 
 ## Recommended: Fast-track with Profiles
