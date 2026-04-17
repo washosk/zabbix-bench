@@ -29,6 +29,7 @@ import (
 var Version = "1.6.0"
 
 const maxLatencySamples = 1_000_000
+const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 type Config struct {
 	NumHosts       int           `yaml:"hosts"`
@@ -64,10 +65,11 @@ type ValuePool struct {
 func newValuePool(size int) *ValuePool {
 	vp := &ValuePool{}
 	for i := 0; i < size; i++ {
-		vp.bools = append(vp.bools, fmt.Sprintf("%d", rand.Intn(2)))           //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
-		vp.uints = append(vp.uints, fmt.Sprintf("%d", rand.Uint64()))          //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
-		vp.floats = append(vp.floats, fmt.Sprintf("%.4f", rand.Float64()*100)) //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
-		vp.chars = append(vp.chars, string([]byte{byte(65 + rand.Intn(26))}))  //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
+		vp.bools = append(vp.bools, fmt.Sprintf("%d", rand.Intn(2)))           // #nosec G404 -- non-crypto RNG is correct for benchmark data
+		vp.uints = append(vp.uints, fmt.Sprintf("%d", rand.Uint64()))          // #nosec G404 -- non-crypto RNG is correct for benchmark data
+		vp.floats = append(vp.floats, fmt.Sprintf("%.4f", rand.Float64()*100)) // #nosec G404 -- non-crypto RNG is correct for benchmark data
+		n := rand.Intn(len(benchAlpha))                                        // #nosec G404 -- non-crypto RNG is correct for benchmark data
+		vp.chars = append(vp.chars, benchAlpha[n:n+1])
 	}
 	return vp
 }
@@ -969,7 +971,7 @@ func (bm *Benchmarker) Run() {
 
 func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	poolSize := len(bm.pool.bools)
-	idx := rand.Intn(poolSize) //nolint:gosec // G404: non-crypto RNG intentional for benchmark index
+	idx := rand.Intn(poolSize) // #nosec G404 -- non-crypto RNG is correct for benchmark data
 
 	sendBatch := func(hostSlice []string) {
 		metricsPerHost := bm.cfg.MetricsPerHost
