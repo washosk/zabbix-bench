@@ -589,7 +589,7 @@ The console summary includes:
 
 ### Important caveat on latency samples
 
-Latency percentiles are calculated from sampled successful packet latencies, with an in-memory cap on the stored sample count. That is usually fine for benchmarking, but it is still sampling, not an infinite full-history ledger.
+Latency percentiles are calculated from up to 1,000,000 sampled successful packet latencies. Packets beyond that cap are still sent and counted in throughput, but their latencies are not stored. At ~50k VPS this cap is reached after roughly 20 seconds, so P99 in very long runs reflects the first 1M samples only.
 
 ### JSON output structure
 

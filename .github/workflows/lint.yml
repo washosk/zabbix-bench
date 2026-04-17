@@ -38,8 +38,7 @@ jobs:
       - name: Check for security issues with gosec
         uses: securego/gosec@master
         with:
-          args: -no-fail -fmt sarif -out gosec-report.sarif ./...
-        continue-on-error: true
+          args: -fmt sarif -out gosec-report.sarif ./...
 
       - name: Upload Gosec report
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false

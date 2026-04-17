@@ -26,7 +26,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.6.0"
+var Version = "1.6.2"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -288,6 +288,7 @@ func applyProfile(cfg *Config, explicitFlags map[string]bool) {
 
 	p, ok := profiles[strings.ToLower(cfg.Profile)]
 	if !ok {
+		log.Printf("Warning: unknown profile %q (valid: light, balanced, flood)", cfg.Profile)
 		return
 	}
 
@@ -1045,7 +1046,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		}
 	}
 
-	if batchSize <= 0 || batchSize > len(hosts) {
+	if batchSize > len(hosts) {
 		batchSize = len(hosts)
 	}
 
@@ -1258,7 +1259,9 @@ func (bm *Benchmarker) Cleanup() {
 				if end > len(bm.hostIDs) {
 					end = len(bm.hostIDs)
 				}
-				_ = bm.api.HostsDeleteByIds(bm.hostIDs[i:end])
+				if err := bm.api.HostsDeleteByIds(bm.hostIDs[i:end]); err != nil {
+					log.Printf("Error deleting hosts: %v", err)
+				}
 			}
 		}
 

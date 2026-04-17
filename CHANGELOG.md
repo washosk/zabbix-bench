@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.2] - 2026-04-17
+
+### Fixed
+
+- **Docker — Non-Root User**: Container now runs as `zabbixbench` (UID 10001) instead of root.
+- **Cleanup Error Handling**: Fallback host deletion path now logs errors instead of silently discarding them.
+- **Dead Code**: Removed unreachable `batchSize <= 0` branch in worker batch sizing; `batchSize` is always positive at that point.
+
+### Changed
+
+- **CI — gosec Now Blocking**: Removed `-no-fail` flag and `continue-on-error: true` from the gosec step; security issues now fail the build.
+- **Invalid Profile Warning**: Passing an unknown `-profile` value now prints a warning listing valid options instead of silently falling back to defaults.
+- **Docs — Latency Sample Cap**: README now documents the 1,000,000-sample cap for percentile calculations and explains when it is reached under high-throughput runs.
+
+---
+
 ## [1.6.1] - 2026-04-17
 
 ### Fixed
