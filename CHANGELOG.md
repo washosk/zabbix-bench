@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-04-17
+
+### Added
+
+- **Docker Support**: Multi-stage `Dockerfile` producing a ~6 MB Alpine image. Includes a `.dockerignore` to keep build context lean.
+- **Docker Documentation**: Usage examples added to `README.md` and `QUICKSTART.md` covering basic runs, environment variable auth, volume-mounted JSON output, YAML config files, and the `--add-host` pattern for host-local Zabbix deployments.
+
+### Fixed
+
+- **Security — File Permissions (G306)**: JSON output file now written with mode `0600` instead of `0644`.
+- **Security — Path Traversal (G304)**: Config file path sanitized with `filepath.Clean()` before reading.
+- **Security — Integer Overflow (G115)**: Removed unsafe `int(uint(idx) % uint(poolSize))` pattern in worker loop; replaced with direct `idx % poolSize`. Fixed char value cast from `rune` to `byte` to avoid int→int32 truncation.
+- **Code Quality — Weak RNG Annotation (G404)**: Annotated intentional `math/rand` usage in benchmark data generation with `//nolint:gosec` to suppress false-positive security warnings; non-crypto randomness is correct for synthetic metric values.
+
+---
+
 ## [1.5.0] - 2026-04-16
 
 ### Added

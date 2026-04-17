@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -25,7 +26,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.5.0"
+var Version = "1.6.0"
 
 const maxLatencySamples = 1_000_000
 
@@ -63,10 +64,10 @@ type ValuePool struct {
 func newValuePool(size int) *ValuePool {
 	vp := &ValuePool{}
 	for i := 0; i < size; i++ {
-		vp.bools = append(vp.bools, fmt.Sprintf("%d", rand.Intn(2)))
-		vp.uints = append(vp.uints, fmt.Sprintf("%d", rand.Uint64()))
-		vp.floats = append(vp.floats, fmt.Sprintf("%.4f", rand.Float64()*100))
-		vp.chars = append(vp.chars, string(rune(65+rand.Intn(26))))
+		vp.bools = append(vp.bools, fmt.Sprintf("%d", rand.Intn(2)))           //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
+		vp.uints = append(vp.uints, fmt.Sprintf("%d", rand.Uint64()))          //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
+		vp.floats = append(vp.floats, fmt.Sprintf("%.4f", rand.Float64()*100)) //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
+		vp.chars = append(vp.chars, string([]byte{byte(65 + rand.Intn(26))}))  //nolint:gosec // G404: non-crypto RNG intentional for benchmark data
 	}
 	return vp
 }
@@ -246,7 +247,7 @@ func defaultConfig() Config {
 func loadConfigFile(path string) (Config, error) {
 	cfg := defaultConfig()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return cfg, err
 	}
@@ -968,7 +969,7 @@ func (bm *Benchmarker) Run() {
 
 func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	poolSize := len(bm.pool.bools)
-	idx := rand.Intn(poolSize)
+	idx := rand.Intn(poolSize) //nolint:gosec // G404: non-crypto RNG intentional for benchmark index
 
 	sendBatch := func(hostSlice []string) {
 		metricsPerHost := bm.cfg.MetricsPerHost
@@ -977,7 +978,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
 
 		for _, host := range hostSlice {
-			i := int(uint(idx) % uint(poolSize))
+			i := idx % poolSize
 			idx++
 
 			// Generate configurable number of metrics per host
@@ -1212,7 +1213,7 @@ func (bm *Benchmarker) ExportJSON(result BenchmarkResult) {
 		return
 	}
 
-	if err := os.WriteFile(bm.cfg.OutputJSON, data, 0644); err != nil {
+	if err := os.WriteFile(bm.cfg.OutputJSON, data, 0600); err != nil {
 		log.Printf("Error writing JSON file: %v", err)
 		return
 	}
