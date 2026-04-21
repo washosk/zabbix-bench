@@ -10,6 +10,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +45,8 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     needs: test
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

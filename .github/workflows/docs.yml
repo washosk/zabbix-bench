@@ -11,6 +11,9 @@ on:
     paths:
       - 'README.md'
 
+permissions:
+  contents: read
+
 jobs:
   markdown-lint:
     runs-on: ubuntu-latest
