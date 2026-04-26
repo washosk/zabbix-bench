@@ -10,9 +10,9 @@ This document outlines security practices, vulnerability reporting, and safe usa
 
 | Version | Support Status | Security Updates |
 | --- | --- | --- |
-| 1.6.x | ✓ Active | Yes |
-| 1.5.x | ⚠️ Limited | Critical fixes only |
-| 1.4.x and earlier | ❌ Unsupported | None |
+| 1.7.x | ✓ Active | Yes |
+| 1.6.x | ⚠️ Limited | Critical fixes only |
+| 1.5.x and earlier | ❌ Unsupported | None |
 
 Please upgrade to the latest stable version. Security updates will not be backported to versions older than 1.5.x.
 
@@ -159,10 +159,10 @@ export ZABBIX_API_KEY="your-token"
 
 `zabbix-bench` uses minimal external dependencies:
 
-- **go-zabbix-sender** — Implements Zabbix Trapper protocol
-  - Repository: github.com/chmller/go-zabbix-sender
-  - Audit: Minimal scope; protocol implementation only
-  - Status: Well-maintained; check for updates regularly
+- **golang-zabbix-sender** — Implements Zabbix Trapper protocol
+  - Repository: github.com/christos-diamantis/golang-zabbix-sender
+  - Audit: Minimal scope; protocol implementation only; supports HA and Proxy Groups.
+  - Status: Actively maintained.
 
 - **go-zabbix-api** — Zabbix API client library
   - Repository: github.com/kgeroczi/go-zabbix-api
@@ -204,7 +204,7 @@ GitHub releases are signed. Verify authenticity:
 git tag -l -n1 | grep v1.
 
 # Verify tag signature
-git verify-tag v1.6.2
+git verify-tag v1.7.0
 ```
 
 ### Binary Verification
@@ -227,11 +227,11 @@ If using the Docker image:
 
 ```bash
 # Pull from official release
-docker pull ghcr.io/washosk/zabbix-bench:v1.6.2
+docker pull ghcr.io/washosk/zabbix-bench:v1.7.0
 
 # Verify image (check for CVEs)
 # Use Trivy or similar image scanner
-trivy image ghcr.io/washosk/zabbix-bench:v1.6.2
+trivy image ghcr.io/washosk/zabbix-bench:v1.7.0
 ```
 
 ## Safe Usage Practices
@@ -322,7 +322,7 @@ Security researchers and community members who have responsibly disclosed vulner
 
 ---
 
-**Last Updated**: April 21, 2026
+**Last Updated**: April 26, 2026
 **Version**: 1.0
 **Status**: Active
 
