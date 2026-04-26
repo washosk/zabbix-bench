@@ -57,6 +57,7 @@ We will credit the reporter in the CHANGELOG and GitHub release notes unless you
 **Risk**: `zabbix-bench` requires Zabbix API credentials to create and delete hosts/items.
 
 **Mitigation**:
+
 - Use **API tokens** instead of username/password when possible (Zabbix 7.0+)
   - Tokens are shorter, rotatable, and can be scoped to specific permissions
   - Pass via `-api-key` flag; never store in YAML config files
@@ -67,6 +68,7 @@ We will credit the reporter in the CHANGELOG and GitHub release notes unless you
 - Credentials are **never** logged, exported, or written to output files
 
 **Best Practice**:
+
 ```bash
 # Good: Use API token
 ./zabbix-bench -api-key "your-token-here" -duration 10s
@@ -89,11 +91,13 @@ export ZABBIX_API_KEY="your-token"
 **Risk**: Metric data sent to Zabbix Trapper is transmitted unencrypted by default.
 
 **Mitigation**:
+
 - Trapper protocol supports TLS encryption (Zabbix 6.0+)
 - Deploy Zabbix with TLS enabled on port 10051
 - Use `-trapper-addr "your-zabbix:10051"` with TLS endpoint
 
 **Network Best Practice**:
+
 - Run `zabbix-bench` on the same network segment as Zabbix (not across the internet)
 - Use firewall rules to restrict Trapper port (10051) to known benchmark sources
 - Monitor for unexpected Trapper connections
@@ -103,6 +107,7 @@ export ZABBIX_API_KEY="your-token"
 **Risk**: By default, `zabbix-bench` deletes all hosts in the configured benchmark group after completion.
 
 **Mitigation**:
+
 1. **Use unique group names**:
    - ✓ Good: `Benchmark-Group-2026-04-21-Capacity-Test`
    - ❌ Bad: `Benchmark` or `Test`
@@ -122,6 +127,7 @@ export ZABBIX_API_KEY="your-token"
 **Risk**: Rapid benchmarking runs could cause Zabbix API or database load.
 
 **Mitigation**:
+
 - Use performance profiles to scale appropriately:
   - `light` — 10 hosts, 5 workers (safe for production-adjacent systems)
   - `balanced` — 100 hosts, 20 workers (typical capacity test)
@@ -135,6 +141,7 @@ export ZABBIX_API_KEY="your-token"
 **Risk**: `zabbix-bench` requires network access to Zabbix API and Trapper ports.
 
 **Mitigation**:
+
 - Restrict Trapper port (10051) to known benchmark sources via firewall
 - Use VPN or private network segments for benchmarking
 - Verify API URL correctness before running (`--validate-only` flag)
@@ -146,6 +153,7 @@ export ZABBIX_API_KEY="your-token"
 **Risk**: Sending `kill -9` to `zabbix-bench` skips graceful cleanup of benchmark resources.
 
 **Mitigation**:
+
 - Always send SIGTERM (`kill <pid>` or Ctrl+C), not SIGKILL (`kill -9`)
 - Process will finish current batch and cleanup hosts gracefully
 - If `kill -9` occurs:
@@ -213,10 +221,13 @@ When downloading release binaries:
 
 1. **Use HTTPS only** (not HTTP)
 2. **Check checksums** if provided:
+
    ```bash
    sha256sum zabbix-bench-linux-amd64 | grep <expected-hash>
    ```
+
 3. **Verify GPG signature** if available:
+
    ```bash
    gpg --verify zabbix-bench-linux-amd64.sig zabbix-bench-linux-amd64
    ```
@@ -265,6 +276,7 @@ trivy image ghcr.io/washosk/zabbix-bench:v1.7.0
 ### Input Validation
 
 All user input is validated:
+
 - API URLs are parsed and validated (format, host reachability)
 - Host count, duration, and numeric parameters checked for reasonableness
 - Group names sanitized (no path traversal, special characters)
@@ -295,6 +307,7 @@ If you discover a security vulnerability in `zabbix-bench`:
 5. **Credit**: You will be credited in the fix unless you request anonymity
 
 We follow a 30-day disclosure deadline:
+
 - Day 1: We acknowledge receipt
 - Day 7: Initial assessment and proposed fix
 - Day 30: Public disclosure (if fix not available by then, details released to allow community patches)
@@ -302,6 +315,7 @@ We follow a 30-day disclosure deadline:
 ## Security Advisories & Announcements
 
 Subscribe to security announcements:
+
 - Watch this repository (GitHub notifications)
 - Star releases (GitHub release notifications)
 - Check CHANGELOG.md for security fix notes
@@ -313,6 +327,7 @@ None currently. This section will be populated if vulnerabilities are discovered
 ## Contact
 
 For security concerns, contact the maintainer privately:
+
 - GitHub Security Advisory: [Use GitHub's built-in reporting](https://github.com/washosk/zabbix-bench/security)
 - Email: [security@example.com] (update with actual email)
 
@@ -325,4 +340,3 @@ Security researchers and community members who have responsibly disclosed vulner
 **Last Updated**: April 26, 2026
 **Version**: 1.0
 **Status**: Active
-
