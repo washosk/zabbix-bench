@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2026-04-26
+
+### Added
+
+- **New Zabbix Sender Core**: Migrated the internal sender logic to `github.com/christos-diamantis/golang-zabbix-sender`.
+- **High Availability Support**: Native support for multiple Trapper addresses and failover.
+- **Proxy Group Redirects**: Support for Zabbix 7.0+ Proxy Group redirects.
+- **Improved Connection Handling**: Replaced manual protocol construction with a robust, library-backed implementation.
+
+### Changed
+
+- **Internal Architecture**: Significant refactoring of `TrapperSender` and `worker` logic to support the new sender core.
+
+---
+
 ## [1.6.2] - 2026-04-17
 
 ### Fixed

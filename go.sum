@@ -1,5 +1,5 @@
-github.com/chmller/go-zabbix-sender v1.0.0 h1:tu0e+Hz66u8w4jg+TsyzfTsB/LektlZSC4plOTqNBGA=
-github.com/chmller/go-zabbix-sender v1.0.0/go.mod h1:rCglOF4Wg1FVUtDaTLypOAp9LNqaGAtyz+6mR+5Q1g8=
+github.com/christos-diamantis/golang-zabbix-sender v1.0.0 h1:dmn9QU/W34YrXWZMQutI+0cvhkjf5E7lu4+ZALsQr9w=
+github.com/christos-diamantis/golang-zabbix-sender v1.0.0/go.mod h1:dwNd/VyeWS/IJ7fXjUKjZQn9fwiqJdKiB1mXuh10uQk=
 github.com/kgeroczi/go-zabbix-api v0.3.1 h1:NdXtLlnzLWVlkrsWKAELmEDEGl8kyX4CAYulwdanjTE=
 github.com/kgeroczi/go-zabbix-api v0.3.1/go.mod h1:V8JConQDs4blyAKdWKVcngh30QsBVDYf2QyEdFg1qtM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=

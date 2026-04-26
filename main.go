@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -21,12 +18,12 @@ import (
 	"syscall"
 	"time"
 
-	zabbix "github.com/chmller/go-zabbix-sender"
+	zabbix "github.com/christos-diamantis/golang-zabbix-sender"
 	zabbixapi "github.com/kgeroczi/go-zabbix-api"
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.6.2"
+var Version = "1.7.0"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -740,65 +737,26 @@ func main() {
 }
 
 type TrapperSender struct {
-	addr    string
-	timeout time.Duration
+	sender *zabbix.Sender
 }
 
 func NewTrapperSender(addr string) *TrapperSender {
 	return &TrapperSender{
-		addr:    addr,
-		timeout: 15 * time.Second,
+		sender: zabbix.NewSenderTimeout(addr, 5*time.Second, 15*time.Second, 15*time.Second),
 	}
 }
 
 func (s *TrapperSender) SendMetrics(metrics []*zabbix.Metric) error {
-	packet := zabbix.NewPacket(metrics, false)
-	dataPacket, err := json.Marshal(packet)
-	if err != nil {
-		return fmt.Errorf("marshal packet error: %v", err)
+	_, errActive, resTrapper, errTrapper := s.sender.SendMetrics(metrics)
+	if errTrapper != nil {
+		return errTrapper
 	}
-
-	buffer := append([]byte("ZBXD\x01"), packet.DataLen()...)
-	buffer = append(buffer, dataPacket...)
-
-	conn, err := net.DialTimeout("tcp", s.addr, s.timeout)
-	if err != nil {
-		return err
+	if errActive != nil {
+		return errActive
 	}
-	defer func() { _ = conn.Close() }()
-
-	if err = conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
-		return fmt.Errorf("set deadline error: %v", err)
+	if resTrapper.Response != "" && resTrapper.Response != "success" {
+		return fmt.Errorf("zabbix rejected data: %s", resTrapper.Info)
 	}
-
-	if _, err = conn.Write(buffer); err != nil {
-		return fmt.Errorf("write error: %v", err)
-	}
-
-	header := make([]byte, 13)
-	if _, err = io.ReadFull(conn, header); err != nil {
-		return fmt.Errorf("read header error: %v", err)
-	}
-
-	if !bytes.Equal(header[:5], []byte("ZBXD\x01")) {
-		return fmt.Errorf("invalid header")
-	}
-
-	dataLen := binary.LittleEndian.Uint64(header[5:13])
-	if dataLen > 100*1024*1024 {
-		return fmt.Errorf("response too large")
-	}
-
-	data := make([]byte, dataLen)
-	if _, err = io.ReadFull(conn, data); err != nil {
-		return fmt.Errorf("read data error: %v", err)
-	}
-
-	var resp zabbix.Response
-	if jsonErr := json.Unmarshal(data, &resp); jsonErr == nil && resp.Response != "success" {
-		return fmt.Errorf("zabbix rejected data: %s", resp.Info)
-	}
-
 	return nil
 }
 

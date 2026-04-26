@@ -59,7 +59,7 @@ Read this before pointing the tool at any shared environment.
 
 Recommended first practice:
 
-- use a unique group name such as `Benchmark-Group-2026-04-16`
+- use a unique group name such as `Benchmark-Group-2026-04-26`
 - run a short test first
 - use `-keep-hosts` on the first run if you want to inspect what was created
 
@@ -76,7 +76,8 @@ Recommended first practice:
 - **Detailed Analytics**: Per-worker statistics including throughput (VPS), packet counts, and latency.
 - **Advanced Error Tracking**: Categorized network and trap errors (timeouts, connection resets, etc.).
 - **Extensible Export**: JSON results for integration with Grafana or other analysis dashboards.
-- **Zabbix 7.0+ Ready**: Native support for API Token authentication and modern Zabbix API schemas.
+- **Zabbix 7.0+ Ready**: Native support for API Token authentication, modern Zabbix API schemas, and **Proxy Group redirects**.
+- **High Availability Support**: Native support for multiple Trapper addresses with failover capabilities.
 - **Operational Safety**: Built-in `--dry-run` to preview execution plans and `--validate-only` for pre-flight connectivity checks.
 - **Performance Profiles**: Preset modes (`light`, `balanced`, `flood`) for rapid testing at different scales.
 - **Dynamic Startup Summary**: High-visibility reports and configuration warnings before every run.

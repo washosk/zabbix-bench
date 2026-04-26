@@ -125,12 +125,12 @@ Use a small run and keep the created hosts so you can inspect them.
   -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
   -user "Admin" \
   -pass "zabbix" \
-  -group "Benchmark-Group-Quickstart" \
-  -hosts 10 \
-  -senders 4 \
-  -batch-hosts 10 \
-  -duration 30s \
-  -keep-hosts
+  -group "Benchmark-Group-2026-04-26" \
+	-hosts 10 \
+	-senders 4 \
+	-batch-hosts 10 \
+	-duration 30s \
+	-keep-hosts
 ```
 
 What this does:
