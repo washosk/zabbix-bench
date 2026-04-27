@@ -1,7 +1,7 @@
 github.com/christos-diamantis/golang-zabbix-sender v1.0.0 h1:dmn9QU/W34YrXWZMQutI+0cvhkjf5E7lu4+ZALsQr9w=
 github.com/christos-diamantis/golang-zabbix-sender v1.0.0/go.mod h1:dwNd/VyeWS/IJ7fXjUKjZQn9fwiqJdKiB1mXuh10uQk=
-github.com/kgeroczi/go-zabbix-api v0.3.1 h1:NdXtLlnzLWVlkrsWKAELmEDEGl8kyX4CAYulwdanjTE=
-github.com/kgeroczi/go-zabbix-api v0.3.1/go.mod h1:V8JConQDs4blyAKdWKVcngh30QsBVDYf2QyEdFg1qtM=
+github.com/kgeroczi/go-zabbix-api v0.3.2 h1:QNa8btkotNHjMSCmc2olDjW0HmKLeVu01l7U+FvBEBI=
+github.com/kgeroczi/go-zabbix-api v0.3.2/go.mod h1:V8JConQDs4blyAKdWKVcngh30QsBVDYf2QyEdFg1qtM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
