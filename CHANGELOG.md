@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] - 2026-04-29
+
+### Fixed
+
+- **Improved Zabbix 7.x Compatibility**: Updated `go-zabbix-api` to `v0.3.2` to support Zabbix 7.x JSON responses where numeric fields are returned as strings.
+- **Library Patch**: Fixed `HostGroupIds` and `item` payload issues in the underlying API library to ensure stable operations on modern Zabbix versions.
+
+---
+
 ## [1.7.0] - 2026-04-26
 
 ### Added
@@ -401,6 +410,8 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 1.7.1 | 2026-04-29 | Stable | Improved Zabbix 7.x compatibility via library update |
+| 1.7.0 | 2026-04-26 | Stable | New Zabbix Sender Core and HA Support |
 | 1.4.1 | 2026-04-16 | Stable | Improved worker metrics naming and alignment |
  | 1.4.0 | 2026-04-12 | Stable | Remove pool, add validation, fix naming, YAML duration |
 | 1.3.4 | 2026-04-11 | Stable | Performance and stability fixes |

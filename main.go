@@ -23,7 +23,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.7.0"
+var Version = "1.7.1"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

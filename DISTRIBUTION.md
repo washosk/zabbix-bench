@@ -23,7 +23,7 @@ File: `Formula/zabbix-bench.rb`
 class ZabbixBench < Formula
   desc "High-performance Zabbix NVPS benchmark tool"
   homepage "https://github.com/washosk/zabbix-bench"
-  url "https://github.com/washosk/zabbix-bench/releases/download/v1.7.0/zabbix-bench-linux-amd64"
+  url "https://github.com/washosk/zabbix-bench/releases/download/v1.7.1/zabbix-bench-linux-amd64"
   sha256 "$(sha256sum zabbix-bench | cut -d' ' -f1)"
   license "MIT"
 
@@ -164,9 +164,9 @@ ENTRYPOINT ["zabbix-bench"]
 
 ```bash
 docker build -t washosk/zabbix-bench:latest .
-docker tag washosk/zabbix-bench:latest washosk/zabbix-bench:v1.7.0
+docker tag washosk/zabbix-bench:latest washosk/zabbix-bench:v1.7.1
 docker push washosk/zabbix-bench:latest
-docker push washosk/zabbix-bench:v1.7.0
+docker push washosk/zabbix-bench:v1.7.1
 ```
 
 ### Step 3: Create docker-compose example

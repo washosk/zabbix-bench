@@ -212,7 +212,7 @@ GitHub releases are signed. Verify authenticity:
 git tag -l -n1 | grep v1.
 
 # Verify tag signature
-git verify-tag v1.7.0
+git verify-tag v1.7.1
 ```
 
 ### Binary Verification
@@ -238,11 +238,11 @@ If using the Docker image:
 
 ```bash
 # Pull from official release
-docker pull ghcr.io/washosk/zabbix-bench:v1.7.0
+docker pull ghcr.io/washosk/zabbix-bench:v1.7.1
 
 # Verify image (check for CVEs)
 # Use Trivy or similar image scanner
-trivy image ghcr.io/washosk/zabbix-bench:v1.7.0
+trivy image ghcr.io/washosk/zabbix-bench:v1.7.1
 ```
 
 ## Safe Usage Practices
@@ -337,6 +337,6 @@ Security researchers and community members who have responsibly disclosed vulner
 
 ---
 
-**Last Updated**: April 26, 2026
+**Last Updated**: April 29, 2026
 **Version**: 1.0
 **Status**: Active
