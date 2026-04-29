@@ -207,7 +207,7 @@ Create a PPA or deb repository with:
 
 ```bash
 # Build deb package
-dpkg-deb --build zabbix-bench_1.0.0_amd64 zabbix-bench_1.0.0_amd64.deb
+dpkg-deb --build zabbix-bench_1.7.1_amd64 zabbix-bench_1.7.1_amd64.deb
 
 # Host on repository server
 # Users: apt-add-repository ppa:yourname/zabbix-bench

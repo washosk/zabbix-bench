@@ -1,4 +1,4 @@
-module zabbix-bench
+module github.com/washosk/zabbix-bench
 
 go 1.24.4
 

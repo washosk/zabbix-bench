@@ -276,7 +276,7 @@ GOOS=windows GOARCH=amd64 go build -o zabbix-bench-windows-amd64.exe
   -output-json /tmp/result.json
 
 # View results
-cat /tmp/result.json | jq '.global_totals.throughput_vps, .worker_stats'
+cat /tmp/result.json | jq '.throughput_vps, .worker_stats'
 ```
 
 ### Debug performance issues
