@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.2] - 2026-04-30
+
+### Added
+
+- **Selective Resource Cleanup**: The tool now tracks exactly which hosts and groups it created and only deletes those specific resources. This prevents accidental deletion of pre-existing hosts in shared environments.
+- **Enriched Reporting**: Added `TotalAttempts`, `LatencySamples`, and `effective_batch` to JSON output for better reproducibility.
+- **Improved Performance**: Each worker now uses an isolated PRNG source to eliminate global lock contention on `math/rand`.
+
+### Changed
+
+- **Rate Mode Refactoring**: Refactored the fixed-rate mode to use a smoother delivery cycle across host slices.
+- **Terminology**: Updated UI and logs to consistently use "Packets" for network-level sends and "Batches" for internal data slicing.
+- **Robust Setup**: The setup phase now aggregates all host/item creation errors and reports them using `errors.Join` before exiting.
+
+### Fixed
+
+- **CLI Overrides**: Fixed an issue where `dry-run` and `validate-only` flags in YAML config files were not correctly overridden by CLI flags.
+- **Validation**: Added missing validation for empty `HostPrefix`.
+- **Path Handling**: Improved `output_json` path validation using `filepath` logic.
+
+---
+
 ## [1.7.1] - 2026-04-29
 
 ### Fixed
@@ -410,6 +432,7 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 1.7.2 | 2026-04-30 | Stable | Selective cleanup safety and performance improvements |
 | 1.7.1 | 2026-04-29 | Stable | Improved Zabbix 7.x compatibility via library update |
 | 1.7.0 | 2026-04-26 | Stable | New Zabbix Sender Core and HA Support |
 | 1.4.1 | 2026-04-16 | Stable | Improved worker metrics naming and alignment |

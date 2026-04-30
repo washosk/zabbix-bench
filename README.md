@@ -10,7 +10,7 @@ Built for repeatable **NVPS (New Values Per Second)** benchmarking, the tool aut
 - **Automated Setup**: Create benchmark host groups, hosts, and Trapper items via the Zabbix API.
 - **Stress Testing**: Send bulk high-volume metric packets to the Zabbix Trapper.
 - **Performance Analytics**: Report real-time throughput, latency percentiles (P50/P95/P99), and per-worker stats.
-- **Export & Cleanup**: Export full benchmark results to JSON and remove all temporary benchmark resources.
+- **Export & Cleanup**: Export full benchmark results to JSON and remove exactly the resources created during the run.
 
 Also useful for:
 
@@ -41,9 +41,7 @@ A normal run has three phases:
 
 1. **Cleanup**
 
-- unless `-keep-hosts` is set, deletes hosts in the benchmark group and then deletes the group itself
-
-That last point matters: cleanup is intentionally aggressive.
+- unless `-keep-hosts` is set, deletes **only the hosts and group created by this specific run**.
 
 ---
 
@@ -52,7 +50,7 @@ That last point matters: cleanup is intentionally aggressive.
 Read this before pointing the tool at any shared environment.
 
 - Use a **dedicated benchmark group name**. Do not reuse a production group.
-- By default, cleanup deletes **all hosts returned by Zabbix for the configured benchmark group**, then removes the group itself.
+- By default, cleanup deletes **only the resources created during the current execution**. Pre-existing hosts in the same group are preserved.
 - `-skip-setup` does **not** validate that every expected benchmark host already exists before sending starts. It reconstructs hostnames from the configured prefix and count.
 - `kill -9` prevents graceful cleanup.
 - If `-trapper-addr` is not set, the tool derives it from `-api-url`. For non-localhost API URLs it uses the same host with port `10051`.

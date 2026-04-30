@@ -104,7 +104,7 @@ export ZABBIX_API_KEY="your-token"
 
 ### 3. Host/Item Cleanup
 
-**Risk**: By default, `zabbix-bench` deletes all hosts in the configured benchmark group after completion.
+**Risk**: By default, `zabbix-bench` deletes exactly the hosts and group it created during the run.
 
 **Mitigation**:
 
@@ -212,7 +212,7 @@ GitHub releases are signed. Verify authenticity:
 git tag -l -n1 | grep v1.
 
 # Verify tag signature
-git verify-tag v1.7.1
+git verify-tag v1.7.2
 ```
 
 ### Binary Verification
@@ -237,12 +237,11 @@ When downloading release binaries:
 If using the Docker image:
 
 ```bash
-# Pull from official release
-docker pull ghcr.io/washosk/zabbix-bench:v1.7.1
+docker pull ghcr.io/washosk/zabbix-bench:v1.7.2
 
 # Verify image (check for CVEs)
 # Use Trivy or similar image scanner
-trivy image ghcr.io/washosk/zabbix-bench:v1.7.1
+trivy image ghcr.io/washosk/zabbix-bench:v1.7.2
 ```
 
 ## Safe Usage Practices
@@ -337,6 +336,6 @@ Security researchers and community members who have responsibly disclosed vulner
 
 ---
 
-**Last Updated**: April 29, 2026
-**Version**: 1.0
+**Last Updated**: April 30, 2026
+**Version**: 1.1
 **Status**: Active

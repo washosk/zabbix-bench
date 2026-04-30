@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -23,7 +24,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "1.7.1"
+var Version = "1.7.2"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -39,14 +40,14 @@ type Config struct {
 	APIKey         string        `yaml:"api_key"`
 	TrapperAddr    string        `yaml:"trapper_addr"`
 	GroupName      string        `yaml:"group"`
-	DurationStr    string        `yaml:"duration"` // e.g. "30s", "2m"
+	DurationStr    string        `yaml:"duration"`
 	Duration       time.Duration `yaml:"-"`
 	SkipSetup      bool          `yaml:"skip_setup"`
 	KeepHosts      bool          `yaml:"keep_hosts"`
 	BatchHosts     int           `yaml:"batch_hosts"`
-	MaxBatchSize   int           `yaml:"max_batch_size"`   // Maximum total metrics per batch
-	MetricsPerHost int           `yaml:"metrics_per_host"` // Number of metrics to send per host
-	OutputJSON     string        `yaml:"output_json"`      // output file for JSON results
+	MaxBatchSize   int           `yaml:"max_batch_size"`
+	MetricsPerHost int           `yaml:"metrics_per_host"`
+	OutputJSON     string        `yaml:"output_json"`
 	DryRun         bool          `yaml:"dry_run"`
 	ValidateOnly   bool          `yaml:"validate_only"`
 	Profile        string        `yaml:"profile"`
@@ -96,6 +97,7 @@ type BenchmarkResult struct {
 	TotalHostsSent int64         `json:"total_host_sends"`
 	TotalValues    int64         `json:"total_values"`
 	TotalPackets   int64         `json:"total_packets"`
+	TotalAttempts  int64         `json:"total_attempts"`
 	ErrorCount     int64         `json:"error_count"`
 	ErrorRate      float64       `json:"error_rate_percent"`
 	Throughput     float64       `json:"throughput_vps"`
@@ -105,6 +107,7 @@ type BenchmarkResult struct {
 	P50LatencyMs   int64         `json:"p50_latency_ms"`
 	P95LatencyMs   int64         `json:"p95_latency_ms"`
 	P99LatencyMs   int64         `json:"p99_latency_ms"`
+	LatencySamples int           `json:"latency_samples"`
 	ErrorsByType   ErrorCategory `json:"errors_by_type"`
 	WorkerStats    []WorkerStats `json:"worker_stats"`
 	Config         any           `json:"config"`
@@ -116,6 +119,10 @@ type Benchmarker struct {
 	hostIDs   []string
 	hostNames []string
 	groupID   string
+
+	createdHostIDs []string
+	createdGroup   bool
+
 	mu        sync.Mutex
 	pool      *ValuePool
 	done      chan struct{}
@@ -124,21 +131,16 @@ type Benchmarker struct {
 
 	sender *TrapperSender
 
-	// Per-worker stats (indexed by workerID; per-worker mutex to avoid global contention)
 	workerStats []*WorkerStats
-	workerMu    []sync.Mutex
 
-	// Global atomic counters
 	totalHostsSent int64
 	totalPackets   int64
 	totalErrors    int64
 	totalLatencyMs int64
 
-	// Latency tracking for percentiles
 	latencies   []int64
 	latenciesMu sync.Mutex
 
-	// Error categorization
 	errorTimeout int64
 	errorClosed  int64
 	errorNetwork int64
@@ -146,13 +148,12 @@ type Benchmarker struct {
 }
 
 func (bm *Benchmarker) printServerHealth() {
-	// Try to get a test item to understand server state
-	// Just log that we're connected
 	log.Printf("Server: %s (connected via API)", bm.cfg.APIURL)
 }
 
 func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 	atomic.AddInt64(&bm.totalLatencyMs, latencyMs)
+
 	bm.latenciesMu.Lock()
 	if len(bm.latencies) < maxLatencySamples {
 		bm.latencies = append(bm.latencies, latencyMs)
@@ -160,7 +161,6 @@ func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 	bm.latenciesMu.Unlock()
 
 	if workerID >= 0 && workerID < len(bm.workerStats) {
-		bm.workerMu[workerID].Lock()
 		stats := bm.workerStats[workerID]
 		stats.TotalLatencyMs += latencyMs
 		if latencyMs < stats.MinLatencyMs {
@@ -169,7 +169,6 @@ func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 		if latencyMs > stats.MaxLatencyMs {
 			stats.MaxLatencyMs = latencyMs
 		}
-		bm.workerMu[workerID].Unlock()
 	}
 }
 
@@ -177,9 +176,7 @@ func (bm *Benchmarker) recordError(err error, workerID int) {
 	atomic.AddInt64(&bm.totalErrors, 1)
 
 	if workerID >= 0 && workerID < len(bm.workerStats) {
-		bm.workerMu[workerID].Lock()
 		bm.workerStats[workerID].ErrorCount++
-		bm.workerMu[workerID].Unlock()
 	}
 
 	errStr := err.Error()
@@ -258,7 +255,7 @@ func loadConfigFile(path string) (Config, error) {
 	if cfg.DurationStr != "" {
 		d, err := time.ParseDuration(cfg.DurationStr)
 		if err != nil {
-			return cfg, fmt.Errorf("invalid duration %q: %v", cfg.DurationStr, err)
+			return cfg, fmt.Errorf("invalid duration %q: %w", cfg.DurationStr, err)
 		}
 		cfg.Duration = d
 	}
@@ -308,29 +305,34 @@ type ValidationResult struct {
 func ValidateConfig(cfg Config) ValidationResult {
 	res := ValidationResult{}
 
-	// Numeric sanity checks
 	if cfg.NumHosts <= 0 {
 		res.Errors = append(res.Errors, "hosts must be > 0")
+	}
+	if strings.TrimSpace(cfg.HostPrefix) == "" {
+		res.Errors = append(res.Errors, "prefix must not be empty")
 	}
 	if cfg.NumSenders <= 0 {
 		res.Errors = append(res.Errors, "senders must be > 0")
 	}
 	if cfg.MetricsPerHost <= 0 {
-		res.Errors = append(res.Errors, "metrics_per_host must be > 0")
+		res.Errors = append(res.Errors, "metrics-per-host / metrics_per_host must be > 0")
 	}
 	if cfg.BatchHosts <= 0 {
-		res.Errors = append(res.Errors, "batch_hosts must be > 0")
+		res.Errors = append(res.Errors, "batch-hosts / batch_hosts must be > 0")
 	}
 	if cfg.MaxBatchSize <= 0 {
-		res.Errors = append(res.Errors, "batch_metrics must be > 0")
+		res.Errors = append(res.Errors, "batch-metrics / max_batch_size must be > 0")
 	}
 	if cfg.Rate < 0 {
 		res.Errors = append(res.Errors, "rate must be >= 0")
 	}
 
-	// Cross-field validation
-	if cfg.MaxBatchSize < cfg.MetricsPerHost {
-		res.Warnings = append(res.Warnings, fmt.Sprintf("batch_metrics (%d) is smaller than metrics_per_host (%d); effective host batch size will be 1", cfg.MaxBatchSize, cfg.MetricsPerHost))
+	if cfg.MetricsPerHost > 0 && cfg.MaxBatchSize > 0 && cfg.MaxBatchSize < cfg.MetricsPerHost {
+		res.Warnings = append(res.Warnings, fmt.Sprintf(
+			"batch-metrics / max_batch_size (%d) is smaller than metrics-per-host / metrics_per_host (%d); effective host batch size will be 1",
+			cfg.MaxBatchSize,
+			cfg.MetricsPerHost,
+		))
 	}
 
 	if cfg.NumSenders > cfg.NumHosts {
@@ -338,29 +340,26 @@ func ValidateConfig(cfg Config) ValidationResult {
 	}
 
 	if cfg.SkipSetup {
-		res.Warnings = append(res.Warnings, "skip_setup is enabled; ensure hosts and items already exist with the correct prefix")
+		res.Warnings = append(res.Warnings, "skip_setup is enabled; cleanup will not delete pre-existing hosts")
 	}
 
 	if !cfg.KeepHosts && cfg.GroupName == "Benchmark-Group" {
-		res.Warnings = append(res.Warnings, "cleanup is enabled with the default group name 'Benchmark-Group'; this may be risky in shared environments")
+		res.Warnings = append(res.Warnings, "cleanup is enabled with the default group name 'Benchmark-Group'; only hosts created by this run will be deleted")
 	}
 
-	// API URL validation
 	if cfg.APIURL == "" {
 		res.Errors = append(res.Errors, "api_url is required")
 	} else if !strings.HasSuffix(cfg.APIURL, "/api_jsonrpc.php") {
 		res.Warnings = append(res.Warnings, "api_url does not end with /api_jsonrpc.php; check if this is correct")
 	}
 
-	// Auth validation
 	if cfg.APIKey == "" && (cfg.User == "" || cfg.Pass == "") {
 		res.Errors = append(res.Errors, "authentication requires either api_key or both user and password")
 	}
 
-	// JSON path validation
 	if cfg.OutputJSON != "" {
-		if idx := strings.LastIndex(cfg.OutputJSON, "/"); idx >= 0 {
-			dir := cfg.OutputJSON[:idx]
+		dir := filepath.Dir(cfg.OutputJSON)
+		if dir != "." && dir != "" {
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				res.Errors = append(res.Errors, fmt.Sprintf("parent directory for output_json does not exist: %s", dir))
 			}
@@ -406,14 +405,12 @@ func BuildRuntimePlan(cfg Config) *RuntimePlan {
 		OutputJSON:     cfg.OutputJSON,
 	}
 
-	// Auth Mode
 	if cfg.APIKey != "" {
 		plan.AuthMode = "API Token"
 	} else {
 		plan.AuthMode = fmt.Sprintf("User/Pass (user: %s)", cfg.User)
 	}
 
-	// Trapper Address
 	if cfg.TrapperAddr != "" {
 		plan.TrapperAddr = cfg.TrapperAddr
 		plan.TrapperAddrLabel = cfg.TrapperAddr
@@ -422,12 +419,14 @@ func BuildRuntimePlan(cfg Config) *RuntimePlan {
 		if idx := strings.Index(apiURL, "://"); idx >= 0 {
 			apiURL = apiURL[idx+3:]
 		}
+
 		var host string
 		if idx := strings.IndexAny(apiURL, "/:"); idx >= 0 {
 			host = apiURL[:idx]
 		} else {
 			host = apiURL
 		}
+
 		if host != "" && host != "localhost" && host != "127.0.0.1" {
 			plan.TrapperAddr = host + ":10051"
 			plan.TrapperAddrLabel = plan.TrapperAddr + " (inferred)"
@@ -437,21 +436,22 @@ func BuildRuntimePlan(cfg Config) *RuntimePlan {
 		}
 	}
 
-	// Effective Batch Size
 	effectiveBatch := cfg.BatchHosts
-	if cfg.MaxBatchSize > 0 {
+	if cfg.MaxBatchSize > 0 && cfg.MetricsPerHost > 0 {
 		hostsFit := cfg.MaxBatchSize / cfg.MetricsPerHost
 		if hostsFit > 0 && hostsFit < effectiveBatch {
 			effectiveBatch = hostsFit
 		}
 	}
+	if effectiveBatch <= 0 {
+		effectiveBatch = 1
+	}
 	plan.EffectiveBatchSize = effectiveBatch
 
-	// Rate Mode
 	if cfg.Rate == 0 {
 		plan.RateMode = "Flood (as fast as possible)"
 	} else {
-		plan.RateMode = fmt.Sprintf("Fixed (%d batches/sec per worker)", cfg.Rate)
+		plan.RateMode = fmt.Sprintf("Fixed (%d packets/sec per worker)", cfg.Rate)
 	}
 
 	return plan
@@ -465,6 +465,7 @@ func PrintValidationReport(res ValidationResult) {
 		}
 		fmt.Println()
 	}
+
 	if len(res.Errors) > 0 {
 		fmt.Println("❌ Validation Errors:")
 		for _, e := range res.Errors {
@@ -475,6 +476,11 @@ func PrintValidationReport(res ValidationResult) {
 }
 
 func PrintStartupSummary(mode string, plan *RuntimePlan, warnings int) {
+	durationLabel := plan.Duration.String()
+	if plan.Duration == 0 {
+		durationLabel = "until interrupted"
+	}
+
 	fmt.Println("╔═════════════════════════════════════════════════════════╗")
 	fmt.Printf("║ %-56s║\n", fmt.Sprintf("RUN MODE: %s", strings.ToUpper(mode)))
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
@@ -484,9 +490,9 @@ func PrintStartupSummary(mode string, plan *RuntimePlan, warnings int) {
 	fmt.Printf("║ Group:   %-47s║\n", plan.GroupName)
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	fmt.Printf("║ Hosts:   %-7d | Senders: %-26d║\n", plan.HostsCount, plan.SendersCount)
-	fmt.Printf("║ Metrics: %-7d | Batch:   %-26d║\n", plan.MetricsPerHost, plan.BatchHosts)
+	fmt.Printf("║ Metrics: %-7d | Batch:   %-26d║\n", plan.MetricsPerHost, plan.EffectiveBatchSize)
 	fmt.Printf("║ Rate:    %-47s║\n", plan.RateMode)
-	fmt.Printf("║ Duration: %-46s║\n", plan.Duration)
+	fmt.Printf("║ Duration: %-46s║\n", durationLabel)
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	fmt.Printf("║ Setup:   %-7v | Cleanup: %-26v║\n", plan.SetupEnabled, plan.CleanupEnabled)
 	if plan.OutputJSON != "" {
@@ -516,7 +522,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nNotes:\n")
 		fmt.Fprintf(os.Stderr, "  -rate 0          Enables flood mode (send as fast as possible)\n")
 		fmt.Fprintf(os.Stderr, "  -skip-setup      Assumes hosts and trapper items already exist with the configured prefix\n")
-		fmt.Fprintf(os.Stderr, "  -keep-hosts      Prevents the automated cleanup of created hosts/groups\n")
+		fmt.Fprintf(os.Stderr, "  -keep-hosts      Prevents cleanup of hosts created by this run\n")
 		fmt.Fprintf(os.Stderr, "  -api-key         If provided, overrides username/password authentication\n")
 	}
 
@@ -527,7 +533,7 @@ func main() {
 	flag.IntVar(&cfg.NumHosts, "hosts", cfg.NumHosts, "Number of hosts to create")
 	flag.StringVar(&cfg.HostPrefix, "prefix", cfg.HostPrefix, "Host prefix")
 	flag.IntVar(&cfg.NumSenders, "senders", cfg.NumSenders, "Number of concurrent senders")
-	flag.IntVar(&cfg.Rate, "rate", cfg.Rate, "Batches per second per host (0=flood)")
+	flag.IntVar(&cfg.Rate, "rate", cfg.Rate, "Packets per second per worker (0=flood)")
 	flag.StringVar(&cfg.APIURL, "api-url", cfg.APIURL, "Zabbix API URL")
 	flag.StringVar(&cfg.User, "user", cfg.User, "Zabbix username")
 	flag.StringVar(&cfg.Pass, "pass", "", "Zabbix password (default: $ZABBIX_PASS or \"zabbix\")")
@@ -550,14 +556,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	// 1. Load config file if provided
 	if cfgFile != "" {
 		fileCfg, err := loadConfigFile(cfgFile)
 		if err != nil {
 			log.Fatalf("❌ Error loading config file: %v", err)
 		}
 
-		// Track which flags were explicitly set via CLI to handle overrides correctly
 		explicit := make(map[string]bool)
 		flag.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
 
@@ -612,14 +616,21 @@ func main() {
 		if !explicit["output-json"] && fileCfg.OutputJSON != "" {
 			cfg.OutputJSON = fileCfg.OutputJSON
 		}
+		if !explicit["dry-run"] {
+			cfg.DryRun = fileCfg.DryRun
+		}
+		if !explicit["validate-only"] {
+			cfg.ValidateOnly = fileCfg.ValidateOnly
+		}
+		if !explicit["profile"] {
+			cfg.Profile = fileCfg.Profile
+		}
 	}
 
-	// 2. Apply Profile defaults to fields not explicitly set
 	explicit := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
 	applyProfile(&cfg, explicit)
 
-	// 3. Apply Environment Variables for Auth
 	if cfg.APIKey == "" {
 		cfg.APIKey = os.Getenv("ZABBIX_API_KEY")
 	}
@@ -630,17 +641,17 @@ func main() {
 		}
 	}
 
-	// 4. Validate
 	vRes := ValidateConfig(cfg)
 	if len(vRes.Errors) > 0 {
 		PrintValidationReport(vRes)
 		os.Exit(1)
 	}
 
-	// 5. Build Runtime Plan
 	plan := BuildRuntimePlan(cfg)
 
-	// 6. Handle Special Modes
+	// Store the resolved trapper address back into config so JSON output reflects reality.
+	cfg.TrapperAddr = plan.TrapperAddr
+
 	if cfg.DryRun {
 		PrintStartupSummary("Dry Run", plan, len(vRes.Warnings))
 		PrintValidationReport(vRes)
@@ -650,7 +661,12 @@ func main() {
 	if cfg.ValidateOnly {
 		PrintStartupSummary("Validation Only", plan, len(vRes.Warnings))
 		PrintValidationReport(vRes)
-		bm := &Benchmarker{cfg: cfg, sender: NewTrapperSender(plan.TrapperAddr)}
+
+		bm := &Benchmarker{
+			cfg:    cfg,
+			sender: NewTrapperSender(plan.TrapperAddr),
+		}
+
 		fmt.Println("🚀 Performing connectivity checks...")
 
 		if err := bm.login(); err != nil {
@@ -659,7 +675,6 @@ func main() {
 		}
 		fmt.Println("✅ API Connectivity/Auth: SUCCESS")
 
-		// Test trapper connection
 		conn, err := net.DialTimeout("tcp", plan.TrapperAddr, 5*time.Second)
 		if err != nil {
 			fmt.Printf("❌ Trapper Connectivity: FAILED - %v\n", err)
@@ -673,7 +688,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// 7. Normal Execution
 	PrintStartupSummary("Benchmark", plan, len(vRes.Warnings))
 
 	bm := &Benchmarker{
@@ -724,6 +738,7 @@ func main() {
 	}
 
 	bm.Run()
+
 	result := bm.GenerateResult()
 	bm.PrintSummary(result, cfg.MetricsPerHost)
 
@@ -737,11 +752,13 @@ func main() {
 }
 
 type TrapperSender struct {
+	addr   string
 	sender *zabbix.Sender
 }
 
 func NewTrapperSender(addr string) *TrapperSender {
 	return &TrapperSender{
+		addr:   addr,
 		sender: zabbix.NewSenderTimeout(addr, 5*time.Second, 15*time.Second, 15*time.Second),
 	}
 }
@@ -762,15 +779,16 @@ func (s *TrapperSender) SendMetrics(metrics []*zabbix.Metric) error {
 
 func (bm *Benchmarker) login() error {
 	var err error
+
 	bm.api, err = zabbixapi.NewAPI(zabbixapi.Config{Url: bm.cfg.APIURL})
 	if err != nil {
-		return fmt.Errorf("error initializing API: %v", err)
+		return fmt.Errorf("error initializing API: %w", err)
 	}
 
 	if bm.cfg.APIKey != "" {
 		_, err = bm.api.Token(bm.cfg.APIKey)
 		if err != nil {
-			return fmt.Errorf("error injecting api key: %v", err)
+			return fmt.Errorf("error injecting api key: %w", err)
 		}
 		log.Printf("Using API token for authentication.")
 		return nil
@@ -778,60 +796,93 @@ func (bm *Benchmarker) login() error {
 
 	_, err = bm.api.Login(bm.cfg.User, bm.cfg.Pass)
 	if err != nil {
-		return fmt.Errorf("error logging into Zabbix API: %v", err)
+		return fmt.Errorf("error logging into Zabbix API: %w", err)
 	}
-	log.Printf("Logged into Zabbix API (user: %s).", bm.cfg.User)
 
-	// Query and display server health
+	log.Printf("Logged into Zabbix API (user: %s).", bm.cfg.User)
 	bm.printServerHealth()
+
 	return nil
 }
 
 func (bm *Benchmarker) Setup() error {
 	log.Printf("=== SETUP PHASE ===")
+
 	if err := bm.login(); err != nil {
 		return err
 	}
 
 	var err error
-	bm.groupID, err = bm.ensureHostGroup(bm.cfg.GroupName)
+	var createdGroup bool
+
+	bm.groupID, createdGroup, err = bm.ensureHostGroup(bm.cfg.GroupName)
 	if err != nil {
 		return err
 	}
-	log.Printf("Host Group: %s (ID: %s)", bm.cfg.GroupName, bm.groupID)
+	bm.createdGroup = createdGroup
+
+	if createdGroup {
+		log.Printf("Host Group created: %s (ID: %s)", bm.cfg.GroupName, bm.groupID)
+	} else {
+		log.Printf("Host Group exists: %s (ID: %s)", bm.cfg.GroupName, bm.groupID)
+	}
 
 	log.Printf("Creating %d hosts in parallel (concurrency=5)...", bm.cfg.NumHosts)
+
 	var wg sync.WaitGroup
+	var errMu sync.Mutex
+	var setupErrs []error
+
 	throttle := make(chan struct{}, 5)
 
 	for i := 0; i < bm.cfg.NumHosts; i++ {
 		hostName := fmt.Sprintf("%s%04d", bm.cfg.HostPrefix, i+1)
+
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
+
 			throttle <- struct{}{}
-			id := bm.createHostWithItems(name)
+			defer func() { <-throttle }()
+
+			id, created, err := bm.createHostWithItems(name)
+
+			bm.mu.Lock()
 			if id != "" {
-				bm.mu.Lock()
 				bm.hostIDs = append(bm.hostIDs, id)
 				bm.hostNames = append(bm.hostNames, name)
-				bm.mu.Unlock()
 			}
-			<-throttle
+			if created && id != "" {
+				bm.createdHostIDs = append(bm.createdHostIDs, id)
+			}
+			bm.mu.Unlock()
+
+			if err != nil {
+				errMu.Lock()
+				setupErrs = append(setupErrs, err)
+				errMu.Unlock()
+			}
 		}(hostName)
 	}
+
 	wg.Wait()
+
+	if len(setupErrs) > 0 {
+		return errors.Join(setupErrs...)
+	}
+
 	log.Printf("Setup complete. %d/%d hosts ready.", len(bm.hostIDs), bm.cfg.NumHosts)
+
 	return nil
 }
 
 func (bm *Benchmarker) loadExistingHosts() error {
 	log.Printf("=== SKIP SETUP: Loading existing hosts with prefix '%s' ===", bm.cfg.HostPrefix)
+
 	if err := bm.login(); err != nil {
 		return err
 	}
 
-	// Look up the host group so cleanup can find it later
 	groups, err := bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": bm.cfg.GroupName}})
 	if err == nil && len(groups) > 0 {
 		bm.groupID = groups[0].GroupID
@@ -845,7 +896,6 @@ func (bm *Benchmarker) loadExistingHosts() error {
 		bm.hostNames = append(bm.hostNames, name)
 	}
 
-	// Look up host IDs for cleanup
 	if bm.groupID != "" {
 		hosts, err := bm.api.HostsGet(zabbixapi.Params{
 			"groupids": []string{bm.groupID},
@@ -859,35 +909,44 @@ func (bm *Benchmarker) loadExistingHosts() error {
 	}
 
 	log.Printf("Loaded %d host names (%d host IDs from API).", len(bm.hostNames), len(bm.hostIDs))
+	log.Printf("Skip setup mode will not delete pre-existing hosts during cleanup.")
+
 	return nil
 }
 
 func (bm *Benchmarker) Run() {
 	log.Printf("=== BENCHMARK PHASE ===")
+
 	floodMode := bm.cfg.Rate == 0
 	log.Printf("Hosts: %d | Senders: %d | Batch: %d | Flood: %v | Duration: %v",
-		len(bm.hostNames), bm.cfg.NumSenders, bm.cfg.BatchHosts, floodMode, bm.cfg.Duration)
+		len(bm.hostNames),
+		bm.cfg.NumSenders,
+		bm.effectiveBatchSize(),
+		floodMode,
+		bm.cfg.Duration,
+	)
 
-	// Initialize per-worker stats and per-worker mutexes
 	bm.workerStats = make([]*WorkerStats, bm.cfg.NumSenders)
-	bm.workerMu = make([]sync.Mutex, bm.cfg.NumSenders)
 	for i := 0; i < bm.cfg.NumSenders; i++ {
 		bm.workerStats[i] = &WorkerStats{ID: i, MinLatencyMs: math.MaxInt64}
 	}
 
 	var wg sync.WaitGroup
+
 	hostsPerWorker := (len(bm.hostNames) + bm.cfg.NumSenders - 1) / bm.cfg.NumSenders
 	bm.startTime = time.Now()
 
 	for i := 0; i < bm.cfg.NumSenders; i++ {
 		start := i * hostsPerWorker
 		end := (i + 1) * hostsPerWorker
+
 		if start >= len(bm.hostNames) {
 			break
 		}
 		if end > len(bm.hostNames) {
 			end = len(bm.hostNames)
 		}
+
 		wg.Add(1)
 		go func(workerID int, hosts []string) {
 			defer wg.Done()
@@ -895,42 +954,81 @@ func (bm *Benchmarker) Run() {
 		}(i, bm.hostNames[start:end])
 	}
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		lastHostsSent := int64(0)
-		for {
-			select {
-			case <-bm.done:
-				return
-			case <-ticker.C:
-				hostsSent := atomic.LoadInt64(&bm.totalHostsSent)
-				packets := atomic.LoadInt64(&bm.totalPackets)
-				errs := atomic.LoadInt64(&bm.totalErrors)
-				elapsed := time.Since(bm.startTime).Seconds()
-				if elapsed < 0.001 {
-					elapsed = 0.001
-				}
-				mph := int64(bm.cfg.MetricsPerHost)
-				vps := float64(hostsSent*mph) / elapsed
-				intervalVPS := float64((hostsSent-lastHostsSent)*mph) / 5.0
-				lastHostsSent = hostsSent
-				errRate := 0.0
-				if packets+errs > 0 {
-					errRate = float64(errs) / float64(packets+errs) * 100
-				}
-				log.Printf("[%6.0fs] %8d hosts | %6d pkts | %10.2f VPS (inst: %.2f) | errors: %d (%.1f%%)",
-					elapsed, hostsSent, packets, vps, intervalVPS, errs, errRate)
-			}
-		}
-	}()
+	go bm.printProgressLoop()
 
 	wg.Wait()
 }
 
+func (bm *Benchmarker) printProgressLoop() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	lastHostsSent := int64(0)
+
+	for {
+		select {
+		case <-bm.done:
+			return
+		case <-ticker.C:
+			hostsSent := atomic.LoadInt64(&bm.totalHostsSent)
+			packets := atomic.LoadInt64(&bm.totalPackets)
+			errs := atomic.LoadInt64(&bm.totalErrors)
+			attempts := packets + errs
+
+			elapsed := time.Since(bm.startTime).Seconds()
+			if elapsed < 0.001 {
+				elapsed = 0.001
+			}
+
+			mph := int64(bm.cfg.MetricsPerHost)
+			vps := float64(hostsSent*mph) / elapsed
+			intervalVPS := float64((hostsSent-lastHostsSent)*mph) / 5.0
+			lastHostsSent = hostsSent
+
+			errRate := 0.0
+			if attempts > 0 {
+				errRate = float64(errs) / float64(attempts) * 100
+			}
+
+			log.Printf("[%6.0fs] %8d hosts | %6d pkts | %10.2f VPS (inst: %.2f) | errors: %d (%.1f%%)",
+				elapsed,
+				hostsSent,
+				packets,
+				vps,
+				intervalVPS,
+				errs,
+				errRate,
+			)
+		}
+	}
+}
+
+func (bm *Benchmarker) effectiveBatchSize() int {
+	batchSize := bm.cfg.BatchHosts
+
+	if bm.cfg.MaxBatchSize > 0 && bm.cfg.MetricsPerHost > 0 {
+		hostsFit := bm.cfg.MaxBatchSize / bm.cfg.MetricsPerHost
+		if hostsFit > 0 && hostsFit < batchSize {
+			batchSize = hostsFit
+		}
+	}
+
+	if batchSize <= 0 {
+		batchSize = 1
+	}
+
+	return batchSize
+}
+
 func (bm *Benchmarker) worker(workerID int, hosts []string) {
+	if len(hosts) == 0 {
+		return
+	}
+
+	localRand := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID))) // #nosec G404 -- non-crypto RNG is correct for benchmark data
+
 	poolSize := len(bm.pool.bools)
-	idx := rand.Intn(poolSize) // #nosec G404 -- non-crypto RNG is correct for benchmark data
+	idx := localRand.Intn(poolSize)
 
 	sendBatch := func(hostSlice []string) {
 		metricsPerHost := bm.cfg.MetricsPerHost
@@ -942,7 +1040,6 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 			i := idx % poolSize
 			idx++
 
-			// Generate configurable number of metrics per host
 			for m := 0; m < metricsPerHost; m++ {
 				metricType := metricTypes[m%len(metricTypes)]
 				metricKey := fmt.Sprintf("test.metric.%d.%s", m, metricType)
@@ -961,6 +1058,8 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 					value = bm.pool.chars[i]
 				case "log":
 					value = fmt.Sprintf("Benchmark log entry %d", m)
+				default:
+					value = "unknown"
 				}
 
 				metrics = append(metrics, zabbix.NewMetric(host, metricKey, value, false))
@@ -970,13 +1069,13 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		t0 := time.Now()
 		var err error
 
-		// Recover from panics in the zabbix sender library
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
 					err = fmt.Errorf("sender panic: %v", r)
 				}
 			}()
+
 			err = bm.sender.SendMetrics(metrics)
 		}()
 
@@ -985,25 +1084,18 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		if err == nil {
 			atomic.AddInt64(&bm.totalHostsSent, int64(len(hostSlice)))
 			atomic.AddInt64(&bm.totalPackets, 1)
+
 			bm.recordLatency(latency, workerID)
 
-			bm.workerMu[workerID].Lock()
-			bm.workerStats[workerID].PacketsSent++
-			bm.workerStats[workerID].HostsSent += int64(len(hostSlice))
-			bm.workerMu[workerID].Unlock()
+			stats := bm.workerStats[workerID]
+			stats.PacketsSent++
+			stats.HostsSent += int64(len(hostSlice))
 		} else {
 			bm.recordError(err, workerID)
 		}
 	}
 
-	batchSize := bm.cfg.BatchHosts
-	if bm.cfg.MaxBatchSize > 0 {
-		hostsFit := bm.cfg.MaxBatchSize / bm.cfg.MetricsPerHost
-		if hostsFit > 0 && hostsFit < batchSize {
-			batchSize = hostsFit
-		}
-	}
-
+	batchSize := bm.effectiveBatchSize()
 	if batchSize > len(hosts) {
 		batchSize = len(hosts)
 	}
@@ -1013,10 +1105,12 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 			if bm.stopped() {
 				return
 			}
+
 			end := i + batchSize
 			if end > len(hosts) {
 				end = len(hosts)
 			}
+
 			sendBatch(hosts[i:end])
 		}
 	}
@@ -1028,18 +1122,40 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		return
 	}
 
+	cursor := 0
+
+	sendNext := func() {
+		if bm.stopped() {
+			return
+		}
+
+		end := cursor + batchSize
+		if end > len(hosts) {
+			end = len(hosts)
+		}
+
+		sendBatch(hosts[cursor:end])
+
+		cursor = end
+		if cursor >= len(hosts) {
+			cursor = 0
+		}
+	}
+
 	dur := time.Second / time.Duration(bm.cfg.Rate)
 	if dur <= 0 {
 		dur = time.Microsecond
 	}
+
 	ticker := time.NewTicker(dur)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-bm.done:
 			return
 		case <-ticker.C:
-			sendAll()
+			sendNext()
 		}
 	}
 }
@@ -1051,12 +1167,17 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	hostsSent := atomic.LoadInt64(&bm.totalHostsSent)
 	packets := atomic.LoadInt64(&bm.totalPackets)
 	errs := atomic.LoadInt64(&bm.totalErrors)
+	attempts := packets + errs
 	latTotal := atomic.LoadInt64(&bm.totalLatencyMs)
+
 	mph := int64(bm.cfg.MetricsPerHost)
 	values := hostsSent * mph
 
 	bm.sortLatencies()
-	var minLat, maxLat int64
+
+	var minLat int64
+	var maxLat int64
+
 	if len(bm.latencies) > 0 {
 		minLat = bm.latencies[0]
 		maxLat = bm.latencies[len(bm.latencies)-1]
@@ -1068,15 +1189,25 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	}
 
 	errRate := 0.0
-	if packets+errs > 0 {
-		errRate = float64(errs) / float64(packets+errs) * 100
+	if attempts > 0 {
+		errRate = float64(errs) / float64(attempts) * 100
 	}
 
-	// Collect worker stats — called after wg.Wait(), no concurrent writes possible
 	workerStats := make([]WorkerStats, 0, len(bm.workerStats))
 	for _, stats := range bm.workerStats {
-		if stats != nil && stats.PacketsSent > 0 {
+		if stats == nil {
+			continue
+		}
+
+		if stats.PacketsSent > 0 {
 			stats.AvgLatencyMs = stats.TotalLatencyMs / stats.PacketsSent
+		}
+
+		if stats.MinLatencyMs == math.MaxInt64 {
+			stats.MinLatencyMs = 0
+		}
+
+		if stats.PacketsSent > 0 || stats.ErrorCount > 0 {
 			workerStats = append(workerStats, *stats)
 		}
 	}
@@ -1085,12 +1216,14 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	if elapsed < 0.001 {
 		elapsed = 0.001
 	}
+
 	return BenchmarkResult{
 		Duration:       elapsed,
 		HostsTested:    len(bm.hostNames),
 		TotalHostsSent: hostsSent,
 		TotalValues:    values,
 		TotalPackets:   packets,
+		TotalAttempts:  attempts,
 		ErrorCount:     errs,
 		ErrorRate:      errRate,
 		Throughput:     float64(values) / elapsed,
@@ -1100,6 +1233,7 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 		P50LatencyMs:   bm.calculatePercentile(50),
 		P95LatencyMs:   bm.calculatePercentile(95),
 		P99LatencyMs:   bm.calculatePercentile(99),
+		LatencySamples: len(bm.latencies),
 		ErrorsByType: ErrorCategory{
 			Timeout: int(atomic.LoadInt64(&bm.errorTimeout)),
 			Closed:  int(atomic.LoadInt64(&bm.errorClosed)),
@@ -1113,14 +1247,17 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 			"senders":          bm.cfg.NumSenders,
 			"metrics_per_host": bm.cfg.MetricsPerHost,
 			"batch_hosts":      bm.cfg.BatchHosts,
+			"effective_batch":  bm.effectiveBatchSize(),
+			"batch_metrics":    bm.cfg.MaxBatchSize,
 			"rate":             bm.cfg.Rate,
 			"trapper_addr":     bm.cfg.TrapperAddr,
+			"skip_setup":       bm.cfg.SkipSetup,
+			"keep_hosts":       bm.cfg.KeepHosts,
 		},
 	}
 }
 
 func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) {
-	// boxLine prints a line that fits exactly inside the 57-char inner width.
 	boxLine := func(content string) {
 		fmt.Printf("║ %-56s║\n", content)
 	}
@@ -1133,6 +1270,7 @@ func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) 
 	boxLine(fmt.Sprintf("Total host sends:    %d", result.TotalHostsSent))
 	boxLine(fmt.Sprintf("Total values:        %d", result.TotalValues))
 	boxLine(fmt.Sprintf("Total packets:       %d", result.TotalPackets))
+	boxLine(fmt.Sprintf("Total attempts:      %d", result.TotalAttempts))
 	boxLine(fmt.Sprintf("Errors:              %d (%.1f%%)", result.ErrorCount, result.ErrorRate))
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	boxLine(fmt.Sprintf("Throughput (VPS):    %.2f", result.Throughput))
@@ -1142,7 +1280,9 @@ func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) 
 	boxLine(fmt.Sprintf("P50 latency:         %d ms", result.P50LatencyMs))
 	boxLine(fmt.Sprintf("P95 latency:         %d ms", result.P95LatencyMs))
 	boxLine(fmt.Sprintf("P99 latency:         %d ms", result.P99LatencyMs))
+	boxLine(fmt.Sprintf("Latency samples:     %d", result.LatencySamples))
 	fmt.Println("╠═════════════════════════════════════════════════════════╣")
+
 	if result.ErrorsByType.Total > 0 {
 		boxLine("Error breakdown:")
 		boxLine(fmt.Sprintf("  Timeout:           %d", result.ErrorsByType.Timeout))
@@ -1155,11 +1295,14 @@ func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) 
 	if len(result.WorkerStats) > 0 {
 		boxLine("PARALLEL EXECUTION BREAKDOWN")
 		for _, ws := range result.WorkerStats {
-			if ws.PacketsSent > 0 {
-				workerVPS := float64(ws.HostsSent*int64(metricsPerHost)) / result.Duration
-				boxLine(fmt.Sprintf("  Worker #%02d: %d pkts | %d hosts | %d err | %.0f VPS",
-					ws.ID, ws.PacketsSent, ws.HostsSent, ws.ErrorCount, workerVPS))
-			}
+			workerVPS := float64(ws.HostsSent*int64(metricsPerHost)) / result.Duration
+			boxLine(fmt.Sprintf("  Worker #%02d: %d pkts | %d hosts | %d err | %.0f VPS",
+				ws.ID,
+				ws.PacketsSent,
+				ws.HostsSent,
+				ws.ErrorCount,
+				workerVPS,
+			))
 		}
 		fmt.Println("╠═════════════════════════════════════════════════════════╣")
 	}
@@ -1186,89 +1329,91 @@ func (bm *Benchmarker) Cleanup() {
 	if bm.api == nil {
 		return
 	}
+
 	log.Printf("=== CLEANUP PHASE ===")
 
-	if bm.groupID != "" {
-		hosts, err := bm.api.HostsGet(zabbixapi.Params{
-			"groupids": []string{bm.groupID},
-			"output":   []string{"hostid"},
-		})
-		if err == nil && len(hosts) > 0 {
-			allIDs := make([]string, len(hosts))
-			for i, h := range hosts {
-				allIDs[i] = h.HostID
+	if len(bm.createdHostIDs) > 0 {
+		log.Printf("Deleting %d hosts created by this run...", len(bm.createdHostIDs))
+
+		batchSize := 50
+		for i := 0; i < len(bm.createdHostIDs); i += batchSize {
+			end := i + batchSize
+			if end > len(bm.createdHostIDs) {
+				end = len(bm.createdHostIDs)
 			}
-			log.Printf("Deleting %d hosts in group (queried from Zabbix)...", len(allIDs))
-			batchSize := 50
-			for i := 0; i < len(allIDs); i += batchSize {
-				end := i + batchSize
-				if end > len(allIDs) {
-					end = len(allIDs)
-				}
-				if err := bm.api.HostsDeleteByIds(allIDs[i:end]); err != nil {
-					log.Printf("Error deleting hosts: %v", err)
-				}
-			}
-		} else if len(bm.hostIDs) > 0 {
-			log.Printf("Falling back: deleting %d tracked hosts...", len(bm.hostIDs))
-			batchSize := 50
-			for i := 0; i < len(bm.hostIDs); i += batchSize {
-				end := i + batchSize
-				if end > len(bm.hostIDs) {
-					end = len(bm.hostIDs)
-				}
-				if err := bm.api.HostsDeleteByIds(bm.hostIDs[i:end]); err != nil {
-					log.Printf("Error deleting hosts: %v", err)
-				}
+
+			if err := bm.api.HostsDeleteByIds(bm.createdHostIDs[i:end]); err != nil {
+				log.Printf("Error deleting hosts: %v", err)
 			}
 		}
+	} else {
+		log.Printf("No hosts created by this run; skipping host deletion.")
+	}
 
-		log.Printf("Deleting Host Group '%s'...", bm.cfg.GroupName)
+	if bm.createdGroup && bm.groupID != "" {
+		log.Printf("Deleting Host Group created by this run: '%s'...", bm.cfg.GroupName)
 		if err := bm.api.HostGroupsDeleteByIds([]string{bm.groupID}); err != nil {
 			log.Printf("Error deleting group: %v", err)
 		}
+	} else {
+		log.Printf("Host group was not created by this run; skipping group deletion.")
 	}
+
 	log.Printf("Cleanup complete.")
 }
 
-func (bm *Benchmarker) ensureHostGroup(name string) (string, error) {
+func (bm *Benchmarker) ensureHostGroup(name string) (string, bool, error) {
 	groups, err := bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
 	if err == nil && len(groups) > 0 {
-		return groups[0].GroupID, nil
+		return groups[0].GroupID, false, nil
 	}
+
 	if err := bm.api.HostGroupsCreate(zabbixapi.HostGroups{{Name: name}}); err != nil {
-		return "", fmt.Errorf("failed to create host group: %v", err)
+		return "", false, fmt.Errorf("failed to create host group: %w", err)
 	}
+
 	groups, err = bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
 	if err != nil || len(groups) == 0 {
-		return "", fmt.Errorf("failed to retrieve host group after creation: %v", err)
+		return "", false, fmt.Errorf("failed to retrieve host group after creation: %w", err)
 	}
-	return groups[0].GroupID, nil
+
+	return groups[0].GroupID, true, nil
 }
 
-func (bm *Benchmarker) createHostWithItems(hostName string) string {
+func (bm *Benchmarker) createHostWithItems(hostName string) (string, bool, error) {
 	var result struct {
 		HostIDs []string `json:"hostids"`
 	}
-	if err := bm.api.CallWithErrorParse("host.create", map[string]interface{}{
+
+	created := false
+
+	err := bm.api.CallWithErrorParse("host.create", map[string]interface{}{
 		"host":   hostName,
 		"name":   hostName,
 		"groups": []map[string]string{{"groupid": bm.groupID}},
 		"interfaces": []map[string]interface{}{{
-			"type": 1, "main": 1, "useip": 1, "ip": "127.0.0.1", "dns": "", "port": "10050",
+			"type":  1,
+			"main":  1,
+			"useip": 1,
+			"ip":    "127.0.0.1",
+			"dns":   "",
+			"port":  "10050",
 		}},
-	}, &result); err != nil {
-		log.Printf("Warning: HostsCreate for %s: %v", hostName, err)
+	}, &result)
+
+	if err != nil {
+		log.Printf("Warning: host.create for %s failed; will check if host already exists: %v", hostName, err)
+	} else if len(result.HostIDs) > 0 {
+		created = true
 	}
 
 	hosts, err := bm.api.HostsGet(zabbixapi.Params{"filter": map[string]string{"host": hostName}})
 	if err != nil || len(hosts) == 0 {
-		log.Printf("Could not get hostID for %s", hostName)
-		return ""
+		return "", created, fmt.Errorf("could not get hostID for %s after host.create: %w", hostName, err)
 	}
+
 	hostID := hosts[0].HostID
 
-	// Map metric types to Zabbix value_type (0=float, 1=char, 2=log, 3=numeric, 4=text)
 	metricTypeMap := map[string]int{
 		"bool":     3,
 		"unsigned": 3,
@@ -1280,8 +1425,7 @@ func (bm *Benchmarker) createHostWithItems(hostName string) string {
 
 	metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
 
-	// Create items matching the metric names generated in sendBatch()
-	var items []map[string]any
+	items := make([]map[string]any, 0, bm.cfg.MetricsPerHost)
 	for m := 0; m < bm.cfg.MetricsPerHost; m++ {
 		metricType := metricTypes[m%len(metricTypes)]
 		itemKey := fmt.Sprintf("test.metric.%d.%s", m, metricType)
@@ -1291,15 +1435,16 @@ func (bm *Benchmarker) createHostWithItems(hostName string) string {
 			"name":       itemName,
 			"key_":       itemKey,
 			"hostid":     hostID,
-			"type":       2, // Trapper type
+			"type":       2,
 			"value_type": metricTypeMap[metricType],
 		})
 	}
 
 	if len(items) > 0 {
 		if err := bm.api.CallWithErrorParse("item.create", items, nil); err != nil {
-			log.Printf("Warning: item.create batch on %s: %v", hostName, err)
+			return hostID, created, fmt.Errorf("failed to create items for %s: %w", hostName, err)
 		}
 	}
-	return hostID
+
+	return hostID, created, nil
 }

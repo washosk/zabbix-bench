@@ -15,7 +15,7 @@ A standard run can:
 - create a host group
 - create hosts and items through the Zabbix API
 - send metrics through the Trapper
-- delete the benchmark hosts and group afterward
+- delete the **specific** benchmark hosts and group it created afterward
 
 That means you should use a **dedicated benchmark group name**.
 
@@ -143,7 +143,7 @@ What this does:
 - prints a summary
 - keeps the created resources because `-keep-hosts` is set
 
-After you verify everything looks right, rerun without `-keep-hosts` if you want automatic cleanup.
+After you verify everything looks right, rerun without `-keep-hosts` if you want automatic cleanup of exactly those hosts.
 
 ---
 
@@ -179,7 +179,7 @@ Once you are comfortable with the behavior, run without `-keep-hosts`:
   -duration 30s
 ```
 
-This will clean up the benchmark resources when the run ends.
+This will clean up exactly the resources created during this run when the benchmark ends.
 
 ---
 
@@ -309,7 +309,7 @@ Only do this if matching hosts and items already exist.
 
 ### Using a shared group name
 
-Avoid this. Cleanup operates at the benchmark group level.
+Avoid this if possible, although version 1.7.2+ only deletes hosts it specifically created.
 
 ### Forgetting the YAML key name
 
