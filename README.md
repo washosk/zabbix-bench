@@ -267,20 +267,135 @@ export ZABBIX_API_KEY="your-api-token"
 ./zabbix-bench \
   -api-url "http://127.0.0.1:8080/api_jsonrpc.php" \
   -hosts 20 \
-  -duration 30s
+## 🚀 Quick Usage
+
+```bash
+# Light sanity check (5 hosts, 2 workers, 1 packet/sec)
+./zabbix-bench -profile light -api-url "http://zabbix/api_jsonrpc.php" -user "Admin" -pass "zabbix"
+
+# Standard capacity test (25 hosts, 10 workers, flood mode)
+./zabbix-bench -profile balanced -api-url "http://zabbix/api_jsonrpc.php" -api-key "your-token-here"
+
+# Heavy stress test for 5 minutes
+./zabbix-bench -profile flood -duration 5m -api-url "http://zabbix/api_jsonrpc.php" -api-key "your-token"
 ```
+
+## 📋 Full Command Line Reference
+
+```text
+Usage of zabbix-bench (version 1.7.2):
+
+Example: zabbix-bench -api-url http://zabbix/api_jsonrpc.php -api-key your-token -hosts 50 -duration 1m
+
+Options:
+  -api-key string
+    	Zabbix API token (default: $ZABBIX_API_KEY; skips user.login)
+  -api-url string
+    	Zabbix API URL (default "http://localhost/zabbix/api_jsonrpc.php")
+  -batch-hosts int
+    	Number of hosts to pack into a single bulk Trapper packet (default 50)
+  -batch-metrics int
+    	Maximum number of metrics per batch packet (default 5000)
+  -config string
+    	YAML configuration file
+  -dry-run
+    	Show execution plan and exit
+  -duration duration
+    	Test duration, e.g. 30s, 2m (0 = run until Ctrl+C)
+  -group string
+    	Host group name (default "Benchmark-Group")
+  -hosts int
+    	Number of hosts to create (default 10)
+  -keep-hosts
+    	Keep hosts after test (skip cleanup)
+  -metrics-per-host int
+    	Number of metrics to send per host (default 6)
+  -output-json string
+    	Output results as JSON to file
+  -pass string
+    	Zabbix password (default: $ZABBIX_PASS or "zabbix")
+  -prefix string
+    	Host prefix (default "bench-")
+  -profile string
+    	Use a benchmarking profile (light, balanced, flood)
+  -rate int
+    	Packets per second per worker (0=flood)
+  -senders int
+    	Number of concurrent senders (default 10)
+  -skip-setup
+    	Skip host/item creation (use existing hosts with same prefix)
+  -trapper-addr string
+    	Zabbix Trapper address
+  -user string
+    	Zabbix username (default "Admin")
+  -v	Print release version and exit
+  -validate-only
+    	Perform pre-flight checks and exit
+  -version
+    	Print release version and exit
+```
+
+## 🛠️ Execution Modes
+
+### 1. Dry Run (`-dry-run`)
+Always recommended before a large benchmark. It validates credentials and displays the resolved execution plan without making any changes.
+
+```text
+╔═════════════════════════════════════════════════════════╗
+║ RUN MODE: DRY RUN                                       ║
+╠═════════════════════════════════════════════════════════╣
+║ Auth:    User/Pass (user: Admin)                        ║
+║ API:     http://localhost:8080/api_jsonrpc.php          ║
+║ Trapper: 127.0.0.1:10051 (default)                      ║
+║ Group:   Documentation-Example                          ║
+╠═════════════════════════════════════════════════════════╣
+║ Hosts:   5       | Senders: 2                         ║
+║ Metrics: 6       | Batch:   50                        ║
+║ Rate:    Fixed (1 packets/sec per worker)               ║
+║ Duration: until interrupted                             ║
+╠═════════════════════════════════════════════════════════╣
+║ Setup:   true    | Cleanup: true                      ║
+║ Warnings: 0                                             ║
+╚═════════════════════════════════════════════════════════╝
+```
+
+### 2. Validation Only (`-validate-only`)
+Performs a real login and tests the TCP connection to the Trapper port, then exits.
 
 ---
 
-## Advanced Usage
+## 📊 Interpreting the Summary
 
-### Dry Run
+At the end of each run, a detailed report is displayed:
 
-Preview exactly what the tool will do without making any API changes or sending traffic. This is highly recommended when testing a new configuration or CI/CD integration.
-
-```bash
-./zabbix-bench -profile balanced -dry-run -api-url "http://zabbix/api_jsonrpc.php" -api-key "your-token"
+```text
+╔═════════════════════════════════════════════════════════╗
+║              BENCHMARK SUMMARY REPORT                  ║
+╠═════════════════════════════════════════════════════════╣
+║ Hosts tested:        1                                 ║
+║ Total host sends:    6919                              ║
+║ Total values:        41514                             ║
+║ Total packets:       6919                              ║
+║ Total attempts:      6919                              ║
+║ Errors:              0 (0.0%)                          ║
+╠═════════════════════════════════════════════════════════╣
+║ Throughput (VPS):    20739.04                          ║
+║ Avg latency:         0 ms                              ║
+║ Min latency:         0 ms                              ║
+║ Max latency:         1 ms                              ║
+║ P50 latency:         0 ms                              ║
+║ P95 latency:         0 ms                              ║
+║ P99 latency:         0 ms                              ║
+║ Latency samples:     6919                              ║
+╠═════════════════════════════════════════════════════════╣
+║ PARALLEL EXECUTION BREAKDOWN                            ║
+║   Worker #00: 6919 pkts | 6919 hosts | 0 err | 20753 VPS║
+╚═════════════════════════════════════════════════════════╝
 ```
+
+- **VPS**: Values Per Second. This is the primary metric for Zabbix capacity (NVPS).
+- **Latency Samples**: Number of successful sends used to calculate percentiles.
+- **Worker Breakdown**: Helps identify if load is evenly distributed across your workers.
 
 ### Validation Only
 
@@ -705,7 +820,18 @@ Things to try:
 - lower `-batch-metrics`
 - switch from flood mode to a positive `-rate`
 
-### Very low or zero-looking average latency
+### Validation Errors
+
+If you provide invalid parameters, the tool will exit early with a clear explanation:
+
+```text
+❌ Validation Errors:
+   - prefix must not be empty
+   - hosts must be > 0
+   - api_url is required
+```
+
+Check your command-line flags or YAML configuration file for missing or invalid values.
 
 The tool records latency in milliseconds, so very fast local runs may show a lot of `0 ms` packet times. That does not mean the run is broken; it means the measured packet round-trip fell below 1 ms often enough to round down.
 

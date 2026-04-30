@@ -231,6 +231,7 @@ At the end of the run you will see a summary like this:
 ║ Total host sends:    327161                            ║
 ║ Total values:        1962966                           ║
 ║ Total packets:       137121                            ║
+║ Total attempts:      137121                            ║
 ║ Errors:              0 (0.0%)                          ║
 ╠═════════════════════════════════════════════════════════╣
 ║ Throughput (VPS):    63501.22                          ║
@@ -240,6 +241,7 @@ At the end of the run you will see a summary like this:
 ║ P50 latency:         0 ms                              ║
 ║ P95 latency:         0 ms                              ║
 ║ P99 latency:         1 ms                              ║
+║ Latency samples:     137121                            ║
 ╠═════════════════════════════════════════════════════════╣
 ║ PARALLEL EXECUTION BREAKDOWN                            ║
 ║   Worker #00: 34280 pkts | 34280 hosts | 0 err | 1109 VPS ║
