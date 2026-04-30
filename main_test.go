@@ -1,3 +1,4 @@
+// Package main provides tests for the zabbix-bench tool.
 package main
 
 import (
@@ -5,6 +6,8 @@ import (
 	"time"
 )
 
+// TestValidateConfig ensures that configuration validation logic correctly
+// identifies missing or invalid parameters.
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -15,7 +18,7 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "Valid minimal config",
 			cfg: Config{
-				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", APIKey: "k",
+				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", APIKey: "k", HostPrefix: "b-",
 			},
 			expectedErrors: 0, expectedWarnings: 0,
 		},
@@ -24,33 +27,33 @@ func TestValidateConfig(t *testing.T) {
 			cfg: Config{
 				NumHosts: 0, NumSenders: 0, MetricsPerHost: 0, BatchHosts: 0, MaxBatchSize: 0,
 			},
-			expectedErrors: 7, expectedWarnings: 0,
+			expectedErrors: 8, expectedWarnings: 0,
 		},
 		{
 			name: "Missing auth",
 			cfg: Config{
-				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php",
+				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", HostPrefix: "b-",
 			},
 			expectedErrors: 1, expectedWarnings: 0,
 		},
 		{
 			name: "Invalid API URL suffix",
 			cfg: Config{
-				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h", APIKey: "k",
+				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h", APIKey: "k", HostPrefix: "b-",
 			},
 			expectedErrors: 0, expectedWarnings: 1,
 		},
 		{
 			name: "Senders > Hosts warning",
 			cfg: Config{
-				NumHosts: 1, NumSenders: 2, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", APIKey: "k",
+				NumHosts: 1, NumSenders: 2, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", APIKey: "k", HostPrefix: "b-",
 			},
 			expectedErrors: 0, expectedWarnings: 1,
 		},
 		{
 			name: "Risky cleanup warning",
 			cfg: Config{
-				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", APIKey: "k",
+				NumHosts: 1, NumSenders: 1, MetricsPerHost: 1, BatchHosts: 1, MaxBatchSize: 1, APIURL: "http://h/api_jsonrpc.php", APIKey: "k", HostPrefix: "b-",
 				GroupName: "Benchmark-Group", KeepHosts: false,
 			},
 			expectedErrors: 0, expectedWarnings: 1,
@@ -70,6 +73,8 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
+// TestBuildRuntimePlan verifies that configuration is correctly transformed
+// into an actionable execution plan.
 func TestBuildRuntimePlan(t *testing.T) {
 	cfg := Config{
 		NumHosts: 10, NumSenders: 5, MetricsPerHost: 6, BatchHosts: 50, MaxBatchSize: 500,
@@ -97,6 +102,8 @@ func TestBuildRuntimePlan(t *testing.T) {
 	}
 }
 
+// TestApplyProfile checks if pre-defined profiles correctly set configuration
+// defaults without overriding explicit user input.
 func TestApplyProfile(t *testing.T) {
 	// Need to simulate flag visibility
 	explicit := map[string]bool{}
@@ -127,6 +134,8 @@ func TestApplyProfile(t *testing.T) {
 	}
 }
 
+// TestYAMLOverridePrecedence ensures that CLI flags take priority over YAML
+// configuration and defaults.
 func TestYAMLOverridePrecedence(t *testing.T) {
 	// This test essentially verifies the logic in main() for merging fileCfg and cfg.
 	// We can't easily test main() directly without reorganization, but we can verify the merging logic.

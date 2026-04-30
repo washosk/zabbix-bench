@@ -1,3 +1,6 @@
+// Zabbix-bench is a high-performance benchmarking tool and load generator
+// for Zabbix, designed to measure ingest throughput and performance
+// through the Zabbix Trapper protocol.
 package main
 
 import (
@@ -24,11 +27,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Version is the current release version of zabbix-bench.
 var Version = "1.7.2"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+// Config represents the application configuration, typically loaded from
+// command-line flags or a YAML configuration file.
 type Config struct {
 	NumHosts       int           `yaml:"hosts"`
 	HostPrefix     string        `yaml:"prefix"`
@@ -53,6 +59,8 @@ type Config struct {
 	Profile        string        `yaml:"profile"`
 }
 
+// ValuePool contains pre-generated values for different metric types
+// to minimize allocation overhead during benchmarking.
 type ValuePool struct {
 	bools  []string
 	uints  []string
@@ -60,6 +68,7 @@ type ValuePool struct {
 	chars  []string
 }
 
+// newValuePool creates and initializes a new ValuePool with the specified size.
 func newValuePool(size int) *ValuePool {
 	vp := &ValuePool{}
 	for i := 0; i < size; i++ {
@@ -72,6 +81,7 @@ func newValuePool(size int) *ValuePool {
 	return vp
 }
 
+// ErrorCategory groups errors by their network or protocol nature.
 type ErrorCategory struct {
 	Timeout int `json:"timeout"`
 	Closed  int `json:"closed"`
@@ -80,6 +90,7 @@ type ErrorCategory struct {
 	Total   int `json:"total"`
 }
 
+// WorkerStats tracks performance and error metrics for a single concurrent worker.
 type WorkerStats struct {
 	ID             int   `json:"worker_id"`
 	PacketsSent    int64 `json:"packets_sent"`
@@ -91,6 +102,7 @@ type WorkerStats struct {
 	AvgLatencyMs   int64 `json:"avg_latency_ms"`
 }
 
+// BenchmarkResult holds the final aggregated statistics for a benchmark run.
 type BenchmarkResult struct {
 	Duration       float64       `json:"duration_seconds"`
 	HostsTested    int           `json:"hosts_tested"`
@@ -113,6 +125,8 @@ type BenchmarkResult struct {
 	Config         any           `json:"config"`
 }
 
+// Benchmarker manages the lifecycle of a benchmark run, including setup,
+// execution, and cleanup.
 type Benchmarker struct {
 	cfg       Config
 	api       *zabbixapi.API
@@ -147,10 +161,12 @@ type Benchmarker struct {
 	errorOther   int64
 }
 
+// printServerHealth logs basic connectivity information for the target Zabbix server.
 func (bm *Benchmarker) printServerHealth() {
 	log.Printf("Server: %s (connected via API)", bm.cfg.APIURL)
 }
 
+// recordLatency updates global and worker-specific latency statistics for a successful send.
 func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 	atomic.AddInt64(&bm.totalLatencyMs, latencyMs)
 
@@ -172,6 +188,7 @@ func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 	}
 }
 
+// recordError updates global and worker-specific error statistics and categorizes the error.
 func (bm *Benchmarker) recordError(err error, workerID int) {
 	atomic.AddInt64(&bm.totalErrors, 1)
 
@@ -192,10 +209,12 @@ func (bm *Benchmarker) recordError(err error, workerID int) {
 	}
 }
 
+// sortLatencies sorts the collected latency samples in ascending order.
 func (bm *Benchmarker) sortLatencies() {
 	sort.Slice(bm.latencies, func(i, j int) bool { return bm.latencies[i] < bm.latencies[j] })
 }
 
+// calculatePercentile computes the latency value at a given percentile.
 func (bm *Benchmarker) calculatePercentile(percent float64) int64 {
 	if len(bm.latencies) == 0 {
 		return 0
@@ -210,10 +229,12 @@ func (bm *Benchmarker) calculatePercentile(percent float64) int64 {
 	return bm.latencies[index]
 }
 
+// Stop signals all workers and loops to terminate gracefully.
 func (bm *Benchmarker) Stop() {
 	bm.stopOnce.Do(func() { close(bm.done) })
 }
 
+// stopped returns true if the benchmark has been signaled to stop.
 func (bm *Benchmarker) stopped() bool {
 	select {
 	case <-bm.done:
@@ -223,6 +244,7 @@ func (bm *Benchmarker) stopped() bool {
 	}
 }
 
+// defaultConfig returns a Config struct with sane default values.
 func defaultConfig() Config {
 	return Config{
 		NumHosts:       10,
@@ -240,6 +262,7 @@ func defaultConfig() Config {
 	}
 }
 
+// loadConfigFile reads and parses a YAML configuration file.
 func loadConfigFile(path string) (Config, error) {
 	cfg := defaultConfig()
 
@@ -263,6 +286,8 @@ func loadConfigFile(path string) (Config, error) {
 	return cfg, nil
 }
 
+// applyProfile applies pre-defined benchmarking profiles to the configuration
+// if they haven't been explicitly overridden by flags.
 func applyProfile(cfg *Config, explicitFlags map[string]bool) {
 	if cfg.Profile == "" {
 		return
@@ -297,11 +322,13 @@ func applyProfile(cfg *Config, explicitFlags map[string]bool) {
 	}
 }
 
+// ValidationResult stores warnings and errors discovered during configuration validation.
 type ValidationResult struct {
 	Warnings []string
 	Errors   []string
 }
 
+// ValidateConfig performs sanity checks on the configuration and returns a ValidationResult.
 func ValidateConfig(cfg Config) ValidationResult {
 	res := ValidationResult{}
 
@@ -369,6 +396,7 @@ func ValidateConfig(cfg Config) ValidationResult {
 	return res
 }
 
+// RuntimePlan describes the resolved execution plan for the benchmark.
 type RuntimePlan struct {
 	AuthMode           string
 	APIURL             string
@@ -389,6 +417,7 @@ type RuntimePlan struct {
 	OutputJSON         string
 }
 
+// BuildRuntimePlan resolves configuration and environment variables into a RuntimePlan.
 func BuildRuntimePlan(cfg Config) *RuntimePlan {
 	plan := &RuntimePlan{
 		APIURL:         cfg.APIURL,
@@ -457,6 +486,7 @@ func BuildRuntimePlan(cfg Config) *RuntimePlan {
 	return plan
 }
 
+// PrintValidationReport prints any warnings or errors found during configuration validation.
 func PrintValidationReport(res ValidationResult) {
 	if len(res.Warnings) > 0 {
 		fmt.Println("⚠️  Configuration Warnings:")
@@ -475,6 +505,7 @@ func PrintValidationReport(res ValidationResult) {
 	}
 }
 
+// PrintStartupSummary displays a high-level overview of the benchmark plan before execution.
 func PrintStartupSummary(mode string, plan *RuntimePlan, warnings int) {
 	durationLabel := plan.Duration.String()
 	if plan.Duration == 0 {
@@ -751,11 +782,13 @@ func main() {
 	}
 }
 
+// TrapperSender manages the communication with the Zabbix Trapper.
 type TrapperSender struct {
 	addr   string
 	sender *zabbix.Sender
 }
 
+// NewTrapperSender creates a new TrapperSender for the specified address.
 func NewTrapperSender(addr string) *TrapperSender {
 	return &TrapperSender{
 		addr:   addr,
@@ -763,6 +796,7 @@ func NewTrapperSender(addr string) *TrapperSender {
 	}
 }
 
+// SendMetrics sends a batch of metrics to the Zabbix Trapper.
 func (s *TrapperSender) SendMetrics(metrics []*zabbix.Metric) error {
 	_, errActive, resTrapper, errTrapper := s.sender.SendMetrics(metrics)
 	if errTrapper != nil {
@@ -777,6 +811,7 @@ func (s *TrapperSender) SendMetrics(metrics []*zabbix.Metric) error {
 	return nil
 }
 
+// login authenticates with the Zabbix API using either a token or credentials.
 func (bm *Benchmarker) login() error {
 	var err error
 
@@ -805,6 +840,7 @@ func (bm *Benchmarker) login() error {
 	return nil
 }
 
+// Setup prepares the Zabbix environment by creating necessary host groups, hosts, and items.
 func (bm *Benchmarker) Setup() error {
 	log.Printf("=== SETUP PHASE ===")
 
@@ -876,6 +912,7 @@ func (bm *Benchmarker) Setup() error {
 	return nil
 }
 
+// loadExistingHosts identifies pre-existing hosts that match the configured prefix for skip-setup mode.
 func (bm *Benchmarker) loadExistingHosts() error {
 	log.Printf("=== SKIP SETUP: Loading existing hosts with prefix '%s' ===", bm.cfg.HostPrefix)
 
@@ -914,6 +951,7 @@ func (bm *Benchmarker) loadExistingHosts() error {
 	return nil
 }
 
+// Run starts the concurrent benchmark workers and monitors progress.
 func (bm *Benchmarker) Run() {
 	log.Printf("=== BENCHMARK PHASE ===")
 
@@ -959,6 +997,7 @@ func (bm *Benchmarker) Run() {
 	wg.Wait()
 }
 
+// printProgressLoop periodically logs the current throughput and error rate.
 func (bm *Benchmarker) printProgressLoop() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -1003,6 +1042,7 @@ func (bm *Benchmarker) printProgressLoop() {
 	}
 }
 
+// effectiveBatchSize calculates the number of hosts per packet based on configured constraints.
 func (bm *Benchmarker) effectiveBatchSize() int {
 	batchSize := bm.cfg.BatchHosts
 
@@ -1020,6 +1060,7 @@ func (bm *Benchmarker) effectiveBatchSize() int {
 	return batchSize
 }
 
+// worker is the main execution loop for a single concurrent sender.
 func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	if len(hosts) == 0 {
 		return
@@ -1160,6 +1201,7 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 	}
 }
 
+// GenerateResult aggregates all collected statistics into a final BenchmarkResult.
 func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	bm.latenciesMu.Lock()
 	defer bm.latenciesMu.Unlock()
@@ -1257,6 +1299,7 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	}
 }
 
+// PrintSummary displays a formatted report of the benchmark results to the console.
 func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) {
 	boxLine := func(content string) {
 		fmt.Printf("║ %-56s║\n", content)
@@ -1310,6 +1353,7 @@ func (bm *Benchmarker) PrintSummary(result BenchmarkResult, metricsPerHost int) 
 	fmt.Println("╚═════════════════════════════════════════════════════════╝")
 }
 
+// ExportJSON writes the benchmark results to a file in JSON format.
 func (bm *Benchmarker) ExportJSON(result BenchmarkResult) {
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
@@ -1325,6 +1369,7 @@ func (bm *Benchmarker) ExportJSON(result BenchmarkResult) {
 	log.Printf("Results exported to %s", bm.cfg.OutputJSON)
 }
 
+// Cleanup removes only the hosts and groups created by this specific benchmark run.
 func (bm *Benchmarker) Cleanup() {
 	if bm.api == nil {
 		return
@@ -1362,6 +1407,7 @@ func (bm *Benchmarker) Cleanup() {
 	log.Printf("Cleanup complete.")
 }
 
+// ensureHostGroup verifies the existence of a host group or creates it if missing.
 func (bm *Benchmarker) ensureHostGroup(name string) (string, bool, error) {
 	groups, err := bm.api.HostGroupsGet(zabbixapi.Params{"filter": map[string]string{"name": name}})
 	if err == nil && len(groups) > 0 {
@@ -1380,6 +1426,7 @@ func (bm *Benchmarker) ensureHostGroup(name string) (string, bool, error) {
 	return groups[0].GroupID, true, nil
 }
 
+// createHostWithItems creates a Zabbix host and populates it with Trapper items.
 func (bm *Benchmarker) createHostWithItems(hostName string) (string, bool, error) {
 	var result struct {
 		HostIDs []string `json:"hostids"`
