@@ -146,6 +146,7 @@ type Benchmarker struct {
 	sender *TrapperSender
 
 	workerStats []*WorkerStats
+	workerMu    []sync.Mutex
 
 	totalHostsSent int64
 	totalPackets   int64
@@ -177,6 +178,7 @@ func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 	bm.latenciesMu.Unlock()
 
 	if workerID >= 0 && workerID < len(bm.workerStats) {
+		bm.workerMu[workerID].Lock()
 		stats := bm.workerStats[workerID]
 		stats.TotalLatencyMs += latencyMs
 		if latencyMs < stats.MinLatencyMs {
@@ -185,6 +187,7 @@ func (bm *Benchmarker) recordLatency(latencyMs int64, workerID int) {
 		if latencyMs > stats.MaxLatencyMs {
 			stats.MaxLatencyMs = latencyMs
 		}
+		bm.workerMu[workerID].Unlock()
 	}
 }
 
@@ -193,7 +196,9 @@ func (bm *Benchmarker) recordError(err error, workerID int) {
 	atomic.AddInt64(&bm.totalErrors, 1)
 
 	if workerID >= 0 && workerID < len(bm.workerStats) {
+		bm.workerMu[workerID].Lock()
 		bm.workerStats[workerID].ErrorCount++
+		bm.workerMu[workerID].Unlock()
 	}
 
 	errStr := err.Error()
@@ -567,7 +572,7 @@ func main() {
 	flag.IntVar(&cfg.Rate, "rate", cfg.Rate, "Packets per second per worker (0=flood)")
 	flag.StringVar(&cfg.APIURL, "api-url", cfg.APIURL, "Zabbix API URL")
 	flag.StringVar(&cfg.User, "user", cfg.User, "Zabbix username")
-	flag.StringVar(&cfg.Pass, "pass", "", "Zabbix password (default: $ZABBIX_PASS or \"zabbix\")")
+	flag.StringVar(&cfg.Pass, "pass", "", "Zabbix password (default: $ZABBIX_PASS)")
 	flag.StringVar(&cfg.APIKey, "api-key", cfg.APIKey, "Zabbix API token (default: $ZABBIX_API_KEY; skips user.login)")
 	flag.StringVar(&cfg.TrapperAddr, "trapper-addr", cfg.TrapperAddr, "Zabbix Trapper address")
 	flag.StringVar(&cfg.GroupName, "group", cfg.GroupName, "Host group name")
@@ -667,9 +672,6 @@ func main() {
 	}
 	if cfg.Pass == "" {
 		cfg.Pass = os.Getenv("ZABBIX_PASS")
-		if cfg.Pass == "" {
-			cfg.Pass = "zabbix"
-		}
 	}
 
 	vRes := ValidateConfig(cfg)
@@ -965,6 +967,7 @@ func (bm *Benchmarker) Run() {
 	)
 
 	bm.workerStats = make([]*WorkerStats, bm.cfg.NumSenders)
+	bm.workerMu = make([]sync.Mutex, bm.cfg.NumSenders)
 	for i := 0; i < bm.cfg.NumSenders; i++ {
 		bm.workerStats[i] = &WorkerStats{ID: i, MinLatencyMs: math.MaxInt64}
 	}
@@ -1128,9 +1131,11 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 
 			bm.recordLatency(latency, workerID)
 
+			bm.workerMu[workerID].Lock()
 			stats := bm.workerStats[workerID]
 			stats.PacketsSent++
 			stats.HostsSent += int64(len(hostSlice))
+			bm.workerMu[workerID].Unlock()
 		} else {
 			bm.recordError(err, workerID)
 		}
