@@ -28,7 +28,7 @@ import (
 )
 
 // Version is the current release version of zabbix-bench.
-var Version = "1.7.2"
+var Version = "1.7.3"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

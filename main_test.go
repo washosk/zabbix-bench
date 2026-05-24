@@ -112,11 +112,11 @@ func TestApplyProfile(t *testing.T) {
 	cfg.Profile = "flood"
 	applyProfile(&cfg, explicit)
 
-	if cfg.NumHosts != 100 {
-		t.Errorf("Profile 'flood' should set hosts=100, got %d", cfg.NumHosts)
+	if cfg.NumHosts != 300 {
+		t.Errorf("Profile 'flood' should set hosts=300, got %d", cfg.NumHosts)
 	}
-	if cfg.NumSenders != 50 {
-		t.Errorf("Profile 'flood' should set senders=50, got %d", cfg.NumSenders)
+	if cfg.NumSenders != 200 {
+		t.Errorf("Profile 'flood' should set senders=200, got %d", cfg.NumSenders)
 	}
 
 	// CLI override should win
@@ -129,8 +129,8 @@ func TestApplyProfile(t *testing.T) {
 	if cfg.NumHosts != 42 {
 		t.Errorf("CLI override should preserve hosts=42, got %d", cfg.NumHosts)
 	}
-	if cfg.NumSenders != 2 {
-		t.Errorf("Profile 'light' should still set senders=2, got %d", cfg.NumSenders)
+	if cfg.NumSenders != 10 {
+		t.Errorf("Profile 'light' should still set senders=10, got %d", cfg.NumSenders)
 	}
 }
 

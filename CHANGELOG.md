@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.3] - 2026-05-24
+
+### Changed
+
+- **Profile Limits Scaled**: Updated the default limits for the `light` (25/10), `balanced` (100/50), and `flood` (300/200) profiles to better reflect modern hardware capabilities and Zabbix 7.0 performance boundaries.
+
+---
+
 ## [1.7.2] - 2026-04-30
 
 ### Added
@@ -432,6 +440,7 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 1.7.3 | 2026-05-24 | Stable | Scaled up default benchmark profile limits |
 | 1.7.2 | 2026-04-30 | Stable | Selective cleanup safety and performance improvements |
 | 1.7.1 | 2026-04-29 | Stable | Improved Zabbix 7.x compatibility via library update |
 | 1.7.0 | 2026-04-26 | Stable | New Zabbix Sender Core and HA Support |

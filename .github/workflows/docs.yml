@@ -54,8 +54,8 @@ jobs:
       - name: Check for required sections
         run: |
           echo "Checking for required README sections..."
-          grep -q "^## Features" README.md && echo "✓ Features section found"
-          grep -q "^## Usage" README.md && echo "✓ Usage section found"
+          grep -q "^## .*Features" README.md && echo "✓ Features section found"
+          grep -q "^## .*Usage" README.md && echo "✓ Usage section found"
           grep -q "^## Requirements" README.md && echo "✓ Requirements section found"
           grep -q "^## Installation" README.md && echo "✓ Installation section found"
           grep -q "^## License" README.md && echo "✓ License section found"

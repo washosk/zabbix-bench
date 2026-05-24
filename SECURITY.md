@@ -129,9 +129,9 @@ export ZABBIX_API_KEY="your-token"
 **Mitigation**:
 
 - Use performance profiles to scale appropriately:
-  - `light` — 10 hosts, 5 workers (safe for production-adjacent systems)
-  - `balanced` — 100 hosts, 20 workers (typical capacity test)
-  - `flood` — 1000 hosts, 100 workers (stress test; requires isolated lab)
+  - `light` — 25 hosts, 10 workers (safe for production-adjacent systems)
+  - `balanced` — 100 hosts, 50 workers (typical capacity test)
+  - `flood` — 300 hosts, 200 workers (stress test; requires isolated lab)
 - Monitor Zabbix API response times during benchmarks
 - Allow cooldown period between runs
 - Run benchmarks during maintenance windows on production systems
@@ -212,7 +212,7 @@ GitHub releases are signed. Verify authenticity:
 git tag -l -n1 | grep v1.
 
 # Verify tag signature
-git verify-tag v1.7.2
+git verify-tag v1.7.3
 ```
 
 ### Binary Verification
@@ -237,11 +237,11 @@ When downloading release binaries:
 If using the Docker image:
 
 ```bash
-docker pull ghcr.io/washosk/zabbix-bench:v1.7.2
+docker pull ghcr.io/washosk/zabbix-bench:v1.7.3
 
 # Verify image (check for CVEs)
 # Use Trivy or similar image scanner
-trivy image ghcr.io/washosk/zabbix-bench:v1.7.2
+trivy image ghcr.io/washosk/zabbix-bench:v1.7.3
 ```
 
 ## Safe Usage Practices

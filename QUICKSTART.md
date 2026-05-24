@@ -99,9 +99,9 @@ The easiest way to start is with a built-in profile. Profiles provide sane defau
 
 | Profile | Hosts | Senders | Use Case |
 | --- | --- | --- | --- |
-| `light` | 5 | 2 | Local sanity checks / low-impact validation |
-| `balanced` | 25 | 10 | Standard throughput and latency testing |
-| `flood` | 100 | 50 | Intensive pressure and stress testing |
+| `light` | 25 | 10 | Local sanity checks / low-impact validation |
+| `balanced` | 100 | 50 | Standard throughput and latency testing |
+| `flood` | 300 | 200 | Intensive pressure and stress testing |
 
 Example: Run a light 30-second benchmark on localhost:
 
