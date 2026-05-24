@@ -314,6 +314,31 @@ At the end of each run, a detailed report is displayed:
 > [!NOTE]
 > Latency percentiles are calculated from a sample cap of 1,000,000 packets to prevent unbounded memory growth. In high-throughput runs (~50k VPS), this cap is reached in about 20 seconds.
 
+### Real-World Hardware Example: 104k NVPS on Google Cloud
+
+To understand what Zabbix limits look like, here is an example of an **Endurance Test** ran against a Google Cloud VM:
+
+*   **Infrastructure:** GCP `n2-standard-8` (8 vCPUs, 32 GB RAM) with 200 GB `pd-ssd`
+*   **Load Parameters:** 300 Hosts, 200 Metrics per host, 200 Senders, 10-Minute Duration.
+
+```text
+╔═════════════════════════════════════════════════════════╗
+║               BENCHMARK SUMMARY REPORT                  ║
+╠═════════════════════════════════════════════════════════╣
+║ Hosts tested:        300                                ║
+║ Total values:        62793200                           ║
+║ Errors:              20 (0.0%)                          ║
+╠═════════════════════════════════════════════════════════╣
+║ Throughput (VPS):    104436.66                          ║
+║ Avg latency:         510 ms                             ║
+║ Max latency:         5667 ms                            ║
+║ P50 latency:         501 ms                             ║
+║ P95 latency:         1238 ms                            ║
+╚═════════════════════════════════════════════════════════╝
+```
+
+*At this exact threshold (~104k NVPS), the PostgreSQL History Syncers saturated the SSD IOPS, causing minor queuing (represented by the 5.6s max latency spike). Pushing the load higher caused severe thrashing, making this the documented sweet-spot maximum for this specific hardware.*
+
 ### Benchmarking Profiles
 
 Profiles provide sensible defaults for common testing scenarios. Explicit CLI flags always override profile values.
