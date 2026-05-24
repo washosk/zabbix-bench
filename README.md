@@ -25,11 +25,12 @@ Also useful for:
 
 `zabbix-bench` manages the full lifecycle of a benchmark run through three automated phases:
 
-1.  **Setup**: Authenticates with the Zabbix API (Token or User/Pass), creates a dedicated host group, and populates it with Trapper items across multiple hosts.
-2.  **Benchmark**: Generates high-volume synthetic metric data in memory and floods the Zabbix Trapper with bulk packets across concurrent sender workers.
-3.  **Cleanup**: Automatically removes **only the hosts and group created during the session**, ensuring your environment remains clean.
+1. **Setup**: Authenticates with the Zabbix API (Token or User/Pass), creates a dedicated host group, and populates it with Trapper items across multiple hosts.
+2. **Benchmark**: Generates high-volume synthetic metric data in memory and floods the Zabbix Trapper with bulk packets across concurrent sender workers.
+3. **Cleanup**: Automatically removes **only the hosts and group created during the session**, ensuring your environment remains clean.
 
-### Key Capabilities:
+### Key Capabilities
+
 - **Scalable Load Generation**: Configurable host count, sender count, and metric density per host.
 - **Diverse Data Simulation**: Cycles through 6 metric types (Boolean, Unsigned, Float, Text, Character, Log).
 - **Intelligent Batching**: High-efficiency Trapper packets with host-based and metric-count constraints.
@@ -37,6 +38,7 @@ Also useful for:
 - **Advanced Error Tracking**: Categorized network and protocol errors (timeouts, connection resets, etc.).
 - **Zabbix 7.0+ Ready**: Native support for API Tokens, modern API schemas, and **Proxy Group redirects**.
 - **Operational Safety**: Built-in `--dry-run` for plan previews and `--validate-only` for pre-flight connectivity checks.
+
 ---
 
 ## ⚠️ Important Safety Notes
@@ -67,6 +69,7 @@ The tool is optimized for modern Zabbix deployments using API tokens for secure,
 ## Installation
 
 ### 1. Download Release Binary (Easiest)
+
 Download the latest binary for your platform from the [Releases](https://github.com/washosk/zabbix-bench/releases) page.
 
 ```bash
@@ -77,6 +80,7 @@ chmod +x zabbix-bench-linux-amd64
 ```
 
 ### 2. Build from Source
+
 Requires Go 1.24+.
 
 ```bash
@@ -162,50 +166,50 @@ Example: zabbix-bench -api-url http://zabbix/api_jsonrpc.php -api-key your-token
 
 Options:
   -api-key string
-    	Zabbix API token (default: $ZABBIX_API_KEY; skips user.login)
+     Zabbix API token (default: $ZABBIX_API_KEY; skips user.login)
   -api-url string
-    	Zabbix API URL (default "http://localhost/zabbix/api_jsonrpc.php")
+     Zabbix API URL (default "http://localhost/zabbix/api_jsonrpc.php")
   -batch-hosts int
-    	Number of hosts to pack into a single bulk Trapper packet (default 50)
+     Number of hosts to pack into a single bulk Trapper packet (default 50)
   -batch-metrics int
-    	Maximum number of metrics per batch packet (default 5000)
+     Maximum number of metrics per batch packet (default 5000)
   -config string
-    	YAML configuration file
+     YAML configuration file
   -dry-run
-    	Show execution plan and exit
+     Show execution plan and exit
   -duration duration
-    	Test duration, e.g. 30s, 2m (0 = run until Ctrl+C)
+     Test duration, e.g. 30s, 2m (0 = run until Ctrl+C)
   -group string
-    	Host group name (default "Benchmark-Group")
+     Host group name (default "Benchmark-Group")
   -hosts int
-    	Number of hosts to create (default 10)
+     Number of hosts to create (default 10)
   -keep-hosts
-    	Keep hosts after test (skip cleanup)
+     Keep hosts after test (skip cleanup)
   -metrics-per-host int
-    	Number of metrics to send per host (default 6)
+     Number of metrics to send per host (default 6)
   -output-json string
-    	Output results as JSON to file
+     Output results as JSON to file
   -pass string
-    	Zabbix password (default: $ZABBIX_PASS or "zabbix")
+     Zabbix password (default: $ZABBIX_PASS or "zabbix")
   -prefix string
-    	Host prefix (default "bench-")
+     Host prefix (default "bench-")
   -profile string
-    	Use a benchmarking profile (light, balanced, flood)
+     Use a benchmarking profile (light, balanced, flood)
   -rate int
-    	Packets per second per worker (0=flood)
+     Packets per second per worker (0=flood)
   -senders int
-    	Number of concurrent senders (default 10)
+     Number of concurrent senders (default 10)
   -skip-setup
-    	Skip host/item creation (use existing hosts with same prefix)
+     Skip host/item creation (use existing hosts with same prefix)
   -trapper-addr string
-    	Zabbix Trapper address
+     Zabbix Trapper address
   -user string
-    	Zabbix username (default "Admin")
-  -v	Print release version and exit
+     Zabbix username (default "Admin")
+  -v Print release version and exit
   -validate-only
-    	Perform pre-flight checks and exit
+     Perform pre-flight checks and exit
   -version
-    	Print release version and exit
+     Print release version and exit
 ```
 
 ### Environment variables
@@ -220,11 +224,13 @@ Options:
 ## 🚀 Quick Usage
 
 ### 1. Basic Auth (User/Pass)
+
 ```bash
 ./zabbix-bench -profile light -api-url "http://zabbix/api_jsonrpc.php" -user "Admin" -pass "zabbix"
 ```
 
 ### 2. Token Auth (Recommended)
+
 ```bash
 # Using flag
 ./zabbix-bench -profile balanced -api-url "http://zabbix/api_jsonrpc.php" -api-key "your-token-here"
@@ -237,6 +243,7 @@ export ZABBIX_API_KEY="your-token"
 ## 🛠️ Execution Modes
 
 ### 1. Dry Run (`-dry-run`)
+
 Always recommended before a large benchmark. It validates credentials and displays the resolved execution plan without making any changes.
 
 ```text
@@ -259,6 +266,7 @@ Always recommended before a large benchmark. It validates credentials and displa
 ```
 
 ### 2. Validation Only (`-validate-only`)
+
 Performs a real login and tests the TCP connection to the Trapper port, then exits.
 
 ---
@@ -292,7 +300,8 @@ At the end of each run, a detailed report is displayed:
 ╚═════════════════════════════════════════════════════════╝
 ```
 
-### Key Metrics Explained:
+### Key Metrics Explained
+
 - **Hosts tested**: Number of hostnames assigned to the benchmark run.
 - **Total host sends**: Total successful host-batch placements across all packets.
 - **Total values**: Calculated as `total host sends × metrics per host`.
@@ -304,7 +313,6 @@ At the end of each run, a detailed report is displayed:
 
 > [!NOTE]
 > Latency percentiles are calculated from a sample cap of 1,000,000 packets to prevent unbounded memory growth. In high-throughput runs (~50k VPS), this cap is reached in about 20 seconds.
-
 
 ### Benchmarking Profiles
 
@@ -487,7 +495,6 @@ Example:
 - `-batch-metrics 5000`
 
 In that case, only `5000 / 200 = 25` hosts fit into a packet, so the effective batch becomes 25 hosts.
-
 
 ---
 
