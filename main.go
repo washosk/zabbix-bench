@@ -305,9 +305,9 @@ func applyProfile(cfg *Config, explicitFlags map[string]bool) {
 	}
 
 	profiles := map[string]profileDefaults{
-		"light":    {hosts: 5, senders: 2, rate: 1},
-		"balanced": {hosts: 25, senders: 10, rate: 0},
-		"flood":    {hosts: 100, senders: 50, rate: 0},
+		"light":    {hosts: 25, senders: 10, rate: 1},
+		"balanced": {hosts: 100, senders: 50, rate: 0},
+		"flood":    {hosts: 300, senders: 200, rate: 0},
 	}
 
 	p, ok := profiles[strings.ToLower(cfg.Profile)]

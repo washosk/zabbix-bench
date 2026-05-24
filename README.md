@@ -345,9 +345,9 @@ Profiles provide sensible defaults for common testing scenarios. Explicit CLI fl
 
 | Profile | Hosts | Senders | Rate | Use Case |
 | --- | --- | --- | --- | --- |
-| `light` | 5 | 2 | 1 batch/s | Local sanity checks / low-impact validation |
-| `balanced` | 25 | 10 | flood | Standard throughput and latency testing |
-| `flood` | 100 | 50 | flood | Intensive pressure and stress testing |
+| `light` | 25 | 10 | 1 batch/s | Local sanity checks / low-impact validation |
+| `balanced` | 100 | 50 | flood | Standard throughput and latency testing |
+| `flood` | 300 | 200 | flood | Intensive pressure and stress testing |
 
 Example using a profile with a local override:
 
