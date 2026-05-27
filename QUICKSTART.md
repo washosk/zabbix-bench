@@ -335,6 +335,8 @@ It does not. It assumes the hosts already exist and have matching Trapper items.
 
 If your API host and Trapper host differ, set `-trapper-addr` explicitly.
 
+If your topology includes a Zabbix Proxy, set `-trapper-addr` to point to the Proxy and use `-skip-setup` after registering and assigning the benchmark hosts to that Proxy in the frontend.
+
 ---
 
 ## Troubleshooting
