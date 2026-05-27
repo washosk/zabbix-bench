@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.4] - 2026-05-27
+
+### Fixed
+
+- **Value Pool Safeguards**: Prevented potential division-by-zero or out-of-bounds index panics in workers by gracefully handling cases where the value pool is empty or uninitialized.
+- **Worker Stats Concurrency**: Added lock synchronization inside result generation to prevent data races with concurrent worker routines.
+
+---
+
 ## [1.7.3] - 2026-05-24
 
 ### Changed
@@ -440,6 +449,7 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 1.7.4 | 2026-05-27 | Stable | Value pool safeguards and worker stats concurrency fixes |
 | 1.7.3 | 2026-05-24 | Stable | Scaled up default benchmark profile limits |
 | 1.7.2 | 2026-04-30 | Stable | Selective cleanup safety and performance improvements |
 | 1.7.1 | 2026-04-29 | Stable | Improved Zabbix 7.x compatibility via library update |

@@ -160,7 +160,7 @@ docker run --rm --add-host=host.docker.internal:host-gateway \
 ## Full command line reference
 
 ```text
-Usage of zabbix-bench (version 1.7.3):
+Usage of zabbix-bench (version 1.7.4):
 
 Example: zabbix-bench -api-url http://zabbix/api_jsonrpc.php -api-key your-token -hosts 50 -duration 1m
 

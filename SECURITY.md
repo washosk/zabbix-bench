@@ -212,7 +212,7 @@ GitHub releases are signed. Verify authenticity:
 git tag -l -n1 | grep v1.
 
 # Verify tag signature
-git verify-tag v1.7.3
+git verify-tag v1.7.4
 ```
 
 ### Binary Verification
@@ -237,11 +237,11 @@ When downloading release binaries:
 If using the Docker image:
 
 ```bash
-docker pull ghcr.io/washosk/zabbix-bench:v1.7.3
+docker pull ghcr.io/washosk/zabbix-bench:v1.7.4
 
 # Verify image (check for CVEs)
 # Use Trivy or similar image scanner
-trivy image ghcr.io/washosk/zabbix-bench:v1.7.3
+trivy image ghcr.io/washosk/zabbix-bench:v1.7.4
 ```
 
 ## Safe Usage Practices

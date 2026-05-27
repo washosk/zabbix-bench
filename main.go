@@ -28,7 +28,7 @@ import (
 )
 
 // Version is the current release version of zabbix-bench.
-var Version = "1.7.3"
+var Version = "1.7.4"
 
 const maxLatencySamples = 1_000_000
 const benchAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -1071,8 +1071,14 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 
 	localRand := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID))) // #nosec G404 -- non-crypto RNG is correct for benchmark data
 
-	poolSize := len(bm.pool.bools)
-	idx := localRand.Intn(poolSize)
+	var poolSize int
+	if bm.pool != nil {
+		poolSize = len(bm.pool.bools)
+	}
+	idx := 0
+	if poolSize > 0 {
+		idx = localRand.Intn(poolSize)
+	}
 
 	sendBatch := func(hostSlice []string) {
 		metricsPerHost := bm.cfg.MetricsPerHost
@@ -1081,8 +1087,11 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 		metricTypes := []string{"bool", "unsigned", "float", "text", "char", "log"}
 
 		for _, host := range hostSlice {
-			i := idx % poolSize
-			idx++
+			var i int
+			if poolSize > 0 {
+				i = idx % poolSize
+				idx++
+			}
 
 			for m := 0; m < metricsPerHost; m++ {
 				metricType := metricTypes[m%len(metricTypes)]
@@ -1091,15 +1100,31 @@ func (bm *Benchmarker) worker(workerID int, hosts []string) {
 				var value string
 				switch metricType {
 				case "bool":
-					value = bm.pool.bools[i]
+					if poolSize > 0 {
+						value = bm.pool.bools[i]
+					} else {
+						value = "0"
+					}
 				case "unsigned":
-					value = bm.pool.uints[i]
+					if poolSize > 0 {
+						value = bm.pool.uints[i]
+					} else {
+						value = "0"
+					}
 				case "float":
-					value = bm.pool.floats[i]
+					if poolSize > 0 {
+						value = bm.pool.floats[i]
+					} else {
+						value = "0.0"
+					}
 				case "text":
 					value = fmt.Sprintf("Benchmark text value %d", m)
 				case "char":
-					value = bm.pool.chars[i]
+					if poolSize > 0 {
+						value = bm.pool.chars[i]
+					} else {
+						value = "a"
+					}
 				case "log":
 					value = fmt.Sprintf("Benchmark log entry %d", m)
 				default:
@@ -1241,11 +1266,12 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 	}
 
 	workerStats := make([]WorkerStats, 0, len(bm.workerStats))
-	for _, stats := range bm.workerStats {
+	for i, stats := range bm.workerStats {
 		if stats == nil {
 			continue
 		}
 
+		bm.workerMu[i].Lock()
 		if stats.PacketsSent > 0 {
 			stats.AvgLatencyMs = stats.TotalLatencyMs / stats.PacketsSent
 		}
@@ -1254,8 +1280,11 @@ func (bm *Benchmarker) GenerateResult() BenchmarkResult {
 			stats.MinLatencyMs = 0
 		}
 
-		if stats.PacketsSent > 0 || stats.ErrorCount > 0 {
-			workerStats = append(workerStats, *stats)
+		statsCopy := *stats
+		bm.workerMu[i].Unlock()
+
+		if statsCopy.PacketsSent > 0 || statsCopy.ErrorCount > 0 {
+			workerStats = append(workerStats, statsCopy)
 		}
 	}
 
