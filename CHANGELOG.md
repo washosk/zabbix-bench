@@ -65,15 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Docker — Non-Root User**: Container now runs as `zabbixbench` (UID 10001) instead of root.
+- **Docker: non-root user**: Container now runs as `zabbixbench` (UID 10001) instead of root.
 - **Cleanup Error Handling**: Fallback host deletion path now logs errors instead of silently discarding them.
 - **Dead Code**: Removed unreachable `batchSize <= 0` branch in worker batch sizing; `batchSize` is always positive at that point.
 
 ### Changed
 
-- **CI — gosec Now Blocking**: Removed `-no-fail` flag and `continue-on-error: true` from the gosec step; security issues now fail the build.
+- **CI: gosec now blocking**: Removed `-no-fail` flag and `continue-on-error: true` from the gosec step; security issues now fail the build.
 - **Invalid Profile Warning**: Passing an unknown `-profile` value now prints a warning listing valid options instead of silently falling back to defaults.
-- **Docs — Latency Sample Cap**: README now documents the 1,000,000-sample cap for percentile calculations and explains when it is reached under high-throughput runs.
+- **Docs: latency sample cap**: README now documents the 1,000,000-sample cap for percentile calculations and explains when it is reached under high-throughput runs.
 
 ---
 
@@ -81,8 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Security — Weak RNG Suppression (G404)**: Replaced `//nolint:gosec` with native gosec `// #nosec G404` annotations. GitHub code scanning runs gosec directly, not through golangci-lint, so the previous directives had no effect.
-- **Security — Integer Overflow (G115)**: Eliminated remaining `int → byte` cast in char value generation by indexing into a `const` alphabet string (`benchAlpha[n:n+1]`), removing the numeric conversion entirely.
+- **Security: weak RNG suppression (G404)**: Replaced `//nolint:gosec` with native gosec `// #nosec G404` annotations. GitHub code scanning runs gosec directly, not through golangci-lint, so the previous directives had no effect.
+- **Security: integer overflow (G115)**: Eliminated remaining `int → byte` cast in char value generation by indexing into a `const` alphabet string (`benchAlpha[n:n+1]`), removing the numeric conversion entirely.
 
 ---
 
@@ -95,10 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Security — File Permissions (G306)**: JSON output file now written with mode `0600` instead of `0644`.
-- **Security — Path Traversal (G304)**: Config file path sanitized with `filepath.Clean()` before reading.
-- **Security — Integer Overflow (G115)**: Removed unsafe `int(uint(idx) % uint(poolSize))` pattern in worker loop; replaced with direct `idx % poolSize`. Fixed char value cast from `rune` to `byte` to avoid int→int32 truncation.
-- **Code Quality — Weak RNG Annotation (G404)**: Annotated intentional `math/rand` usage in benchmark data generation to suppress false-positive security warnings; non-crypto randomness is correct for synthetic metric values.
+- **Security: file permissions (G306)**: JSON output file now written with mode `0600` instead of `0644`.
+- **Security: path traversal (G304)**: Config file path sanitized with `filepath.Clean()` before reading.
+- **Security: integer overflow (G115)**: Removed unsafe `int(uint(idx) % uint(poolSize))` pattern in worker loop; replaced with direct `idx % poolSize`. Fixed char value cast from `rune` to `byte` to avoid int→int32 truncation.
+- **Code quality: weak RNG annotation (G404)**: Annotated intentional `math/rand` usage in benchmark data generation to suppress false-positive security warnings; non-crypto randomness is correct for synthetic metric values.
 
 ---
 

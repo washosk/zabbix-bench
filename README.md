@@ -1,4 +1,4 @@
-# zabbix-bench: High-Performance Zabbix Benchmarking & Stress Testing
+# zabbix-bench: high-performance Zabbix benchmarking & stress testing
 
 [![Build & Test](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/build.yml)
 [![Lint & Code Quality](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml/badge.svg)](https://github.com/washosk/zabbix-bench/actions/workflows/lint.yml)
@@ -21,7 +21,7 @@ Also useful for:
 
 ---
 
-## 🌟 Core Features
+## Core features
 
 `zabbix-bench` manages the full lifecycle of a benchmark run through three automated phases:
 
@@ -29,7 +29,7 @@ Also useful for:
 2. **Benchmark**: Generates high-volume synthetic metric data in memory and floods the Zabbix Trapper with bulk packets across concurrent sender workers.
 3. **Cleanup**: Automatically removes **only the hosts and group created during the session**, ensuring your environment remains clean.
 
-### Key Capabilities
+### Capabilities
 
 - **Scalable Load Generation**: Configurable host count, sender count, and metric density per host.
 - **Diverse Data Simulation**: Cycles through 6 metric types (Boolean, Unsigned, Float, Text, Character, Log).
@@ -41,7 +41,7 @@ Also useful for:
 
 ---
 
-## ⚠️ Important Safety Notes
+## Important safety notes
 
 Read this before pointing the tool at any shared environment:
 
@@ -68,7 +68,7 @@ The tool is optimized for modern Zabbix deployments using API tokens for secure,
 
 ## Installation
 
-### 1. Download Release Binary (Easiest)
+### 1. Download release binary (easiest)
 
 Download the latest binary for your platform from the [Releases](https://github.com/washosk/zabbix-bench/releases) page.
 
@@ -79,7 +79,7 @@ chmod +x zabbix-bench-linux-amd64
 ./zabbix-bench-linux-amd64 --help
 ```
 
-### 2. Build from Source
+### 2. Build from source
 
 Requires Go 1.24+.
 
@@ -157,7 +157,7 @@ docker run --rm --add-host=host.docker.internal:host-gateway \
 
 ---
 
-## 📋 Full Command Line Reference
+## Full command line reference
 
 ```text
 Usage of zabbix-bench (version 1.7.3):
@@ -221,15 +221,15 @@ Options:
 
 ---
 
-## 🚀 Quick Usage
+## Quick usage
 
-### 1. Basic Auth (User/Pass)
+### 1. Basic auth (user/password)
 
 ```bash
 ./zabbix-bench -profile light -api-url "http://zabbix/api_jsonrpc.php" -user "Admin" -pass "zabbix"
 ```
 
-### 2. Token Auth (Recommended)
+### 2. Token auth (recommended)
 
 ```bash
 # Using flag
@@ -240,9 +240,9 @@ export ZABBIX_API_KEY="your-token"
 ./zabbix-bench -profile flood -duration 5m -api-url "http://zabbix/api_jsonrpc.php"
 ```
 
-## 🛠️ Execution Modes
+## Execution modes
 
-### 1. Dry Run (`-dry-run`)
+### 1. Dry run (`-dry-run`)
 
 Always recommended before a large benchmark. It validates credentials and displays the resolved execution plan without making any changes.
 
@@ -271,7 +271,7 @@ Performs a real login and tests the TCP connection to the Trapper port, then exi
 
 ---
 
-## 📊 Interpreting the Summary
+## Interpreting the summary
 
 At the end of each run, a detailed report is displayed:
 
@@ -300,7 +300,7 @@ At the end of each run, a detailed report is displayed:
 ╚═════════════════════════════════════════════════════════╝
 ```
 
-### Key Metrics Explained
+### Metrics explained
 
 - **Hosts tested**: Number of hostnames assigned to the benchmark run.
 - **Total host sends**: Total successful host-batch placements across all packets.
@@ -314,7 +314,7 @@ At the end of each run, a detailed report is displayed:
 > [!NOTE]
 > Latency percentiles are calculated from a sample cap of 1,000,000 packets to prevent unbounded memory growth. In high-throughput runs (~50k VPS), this cap is reached in about 20 seconds.
 
-### Real-World Hardware Example: 104k NVPS on Google Cloud
+### Real-world hardware example (104k NVPS on Google Cloud)
 
 To understand what Zabbix limits look like, here is an example of an **Endurance Test** ran against a Google Cloud VM:
 
@@ -339,7 +339,7 @@ To understand what Zabbix limits look like, here is an example of an **Endurance
 
 *At this exact threshold (~104k NVPS), the PostgreSQL History Syncers saturated the SSD IOPS, causing minor queuing (represented by the 5.6s max latency spike). Pushing the load higher caused severe thrashing, making this the documented sweet-spot maximum for this specific hardware.*
 
-### Benchmarking Profiles
+### Benchmarking profiles
 
 Profiles provide sensible defaults for common testing scenarios. Explicit CLI flags always override profile values.
 
@@ -521,22 +521,20 @@ Example:
 
 In that case, only `5000 / 200 = 25` hosts fit into a packet, so the effective batch becomes 25 hosts.
 
----
-
-### JSON Output Structure
+### JSON output structure
 
 The JSON export (`-output-json`) includes global totals, latency percentiles, categorized error counts, and per-worker stats. It is ideal for loading results into dashboards or comparing performance regressions over time.
 
 ---
 
-## 🔌 Benchmarking with Zabbix Proxies & Separated Topologies
+## Benchmarking with Zabbix proxies and separated topologies
 
 In larger Zabbix deployments, the **Frontend**, **Server**, and **Proxies** are often hosted on separate servers. By default, `zabbix-bench` assumes all components are co-located, but it easily scales to separated setups using the following guidelines:
 
 *   **API URL (`-api-url`)**: Must always point to the Zabbix Frontend (web server), since only the frontend serves the JSON-RPC API.
 *   **Trapper Address (`-trapper-addr`)**: Must point to the specific port `10051` of the component receiving the load (either the Zabbix Server or a Zabbix Proxy).
 
-### Benchmarking a Zabbix Proxy Ingestion Path
+### Benchmarking a Zabbix proxy ingestion path
 
 If you send Trapper data to a Zabbix Proxy for a host it does not monitor, or if you send to Zabbix Server for a host assigned to a Proxy, Zabbix will reject the data. 
 
@@ -671,7 +669,7 @@ Things to try:
 - lower `-batch-metrics`
 - switch from flood mode to a positive `-rate`
 
-### Validation Errors
+### Validation errors
 
 If you provide invalid parameters, the tool will exit early with a clear explanation:
 

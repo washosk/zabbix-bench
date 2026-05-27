@@ -129,9 +129,9 @@ export ZABBIX_API_KEY="your-token"
 **Mitigation**:
 
 - Use performance profiles to scale appropriately:
-  - `light` — 25 hosts, 10 workers (safe for production-adjacent systems)
-  - `balanced` — 100 hosts, 50 workers (typical capacity test)
-  - `flood` — 300 hosts, 200 workers (stress test; requires isolated lab)
+  - `light`: 25 hosts, 10 workers (safe for production-adjacent systems)
+  - `balanced`: 100 hosts, 50 workers (typical capacity test)
+  - `flood`: 300 hosts, 200 workers (stress test; requires isolated lab)
 - Monitor Zabbix API response times during benchmarks
 - Allow cooldown period between runs
 - Run benchmarks during maintenance windows on production systems
@@ -167,17 +167,17 @@ export ZABBIX_API_KEY="your-token"
 
 `zabbix-bench` uses minimal external dependencies:
 
-- **golang-zabbix-sender** — Implements Zabbix Trapper protocol
+- **golang-zabbix-sender** (implements the Zabbix Trapper protocol)
   - Repository: github.com/christos-diamantis/golang-zabbix-sender
   - Audit: Minimal scope; protocol implementation only; supports HA and Proxy Groups.
   - Status: Actively maintained.
 
-- **go-zabbix-api** — Zabbix API client library
+- **go-zabbix-api** (a Zabbix API client library)
   - Repository: github.com/kgeroczi/go-zabbix-api
   - Audit: API wrapper; no cryptographic functions
   - Status: Community-maintained; monitor for updates
 
-- **gopkg.in/yaml.v3** — YAML parser (stdlib alternative)
+- **gopkg.in/yaml.v3** (a standard YAML parser)
   - Audit: Standard, widely-used YAML library
   - Status: Actively maintained by Go community
 

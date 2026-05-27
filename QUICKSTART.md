@@ -1,4 +1,4 @@
-# Quick Start Guide
+# Quick start guide
 
 Use this guide when you want a safe first run without reading the full documentation first.
 
@@ -19,7 +19,7 @@ A standard run can:
 
 That means you should use a **dedicated benchmark group name**.
 
-### Safety First: Dry Run
+### Safety first: dry run
 
 Before making any changes to your Zabbix server, you can use `--dry-run` to preview exactly what the tool will do. This resolves all parameters and validates your configuration without any network impact.
 
@@ -93,7 +93,7 @@ If Zabbix runs on the same machine as Docker, add `--add-host=host.docker.intern
 
 ---
 
-## Recommended: Fast-track with Profiles
+## Recommended: fast-track with profiles
 
 The easiest way to start is with a built-in profile. Profiles provide sane defaults for hosts, senders, and rates.
 
