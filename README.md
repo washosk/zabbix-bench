@@ -318,8 +318,8 @@ At the end of each run, a detailed report is displayed:
 
 To understand what Zabbix limits look like, here is an example of an **Endurance Test** ran against a Google Cloud VM:
 
-*   **Infrastructure:** GCP `n2-standard-8` (8 vCPUs, 32 GB RAM) with 200 GB `pd-ssd`
-*   **Load Parameters:** 300 Hosts, 200 Metrics per host, 200 Senders, 10-Minute Duration.
+- **Infrastructure:** GCP `n2-standard-8` (8 vCPUs, 32 GB RAM) with 200 GB `pd-ssd`
+- **Load Parameters:** 300 Hosts, 200 Metrics per host, 200 Senders, 10-Minute Duration.
 
 ```text
 ╔═════════════════════════════════════════════════════════╗
@@ -531,16 +531,17 @@ The JSON export (`-output-json`) includes global totals, latency percentiles, ca
 
 In larger Zabbix deployments, the **Frontend**, **Server**, and **Proxies** are often hosted on separate servers. By default, `zabbix-bench` assumes all components are co-located, but it easily scales to separated setups using the following guidelines:
 
-*   **API URL (`-api-url`)**: Must always point to the Zabbix Frontend (web server), since only the frontend serves the JSON-RPC API.
-*   **Trapper Address (`-trapper-addr`)**: Must point to the specific port `10051` of the component receiving the load (either the Zabbix Server or a Zabbix Proxy).
+- **API URL (`-api-url`)**: Must always point to the Zabbix Frontend (web server), since only the frontend serves the JSON-RPC API.
+- **Trapper Address (`-trapper-addr`)**: Must point to the specific port `10051` of the component receiving the load (either the Zabbix Server or a Zabbix Proxy).
 
 ### Benchmarking a Zabbix proxy ingestion path
 
-If you send Trapper data to a Zabbix Proxy for a host it does not monitor, or if you send to Zabbix Server for a host assigned to a Proxy, Zabbix will reject the data. 
+If you send Trapper data to a Zabbix Proxy for a host it does not monitor, or if you send to Zabbix Server for a host assigned to a Proxy, Zabbix will reject the data.
 
 To benchmark ingestion through a Zabbix Proxy, use a **two-phase setup**:
 
-1.  **Register the Hosts**: Run the setup phase once and keep the hosts:
+1. **Register the Hosts**: Run the setup phase once and keep the hosts:
+
     ```bash
     ./zabbix-bench \
       -api-url "http://zabbix-frontend/zabbix/api_jsonrpc.php" \
@@ -551,8 +552,10 @@ To benchmark ingestion through a Zabbix Proxy, use a **two-phase setup**:
       -duration 5s \
       -keep-hosts
     ```
-2.  **Assign Hosts to the Proxy**: Log in to the Zabbix Frontend web UI, navigate to the host list, select the created hosts (e.g., `bench-0001` through `bench-0100`), and mass-update their monitoring target to your **Zabbix Proxy**.
-3.  **Run the Load Test through the Proxy**: Run the benchmark again, using `-skip-setup` and pointing `-trapper-addr` to the **Zabbix Proxy**:
+
+2. **Assign Hosts to the Proxy**: Log in to the Zabbix Frontend web UI, navigate to the host list, select the created hosts (e.g., `bench-0001` through `bench-0100`), and mass-update their monitoring target to your **Zabbix Proxy**.
+3. **Run the Load Test through the Proxy**: Run the benchmark again, using `-skip-setup` and pointing `-trapper-addr` to the **Zabbix Proxy**:
+
     ```bash
     ./zabbix-bench \
       -api-url "http://zabbix-frontend/zabbix/api_jsonrpc.php" \
@@ -566,7 +569,6 @@ To benchmark ingestion through a Zabbix Proxy, use a **two-phase setup**:
     ```
 
 ---
-
 
 ## Tuning guidance
 
