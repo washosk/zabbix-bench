@@ -10,6 +10,7 @@ This document outlines security practices, vulnerability reporting, and safe usa
 
 | Version | Support Status | Security Updates |
 | --- | --- | --- |
+| 2.0.x | ✓ Active | Yes |
 | 1.7.x | ✓ Active | Yes |
 | 1.6.x | ⚠️ Limited | Critical fixes only |
 | 1.5.x and earlier | ❌ Unsupported | None |
@@ -212,7 +213,7 @@ GitHub releases are signed. Verify authenticity:
 git tag -l -n1 | grep v1.
 
 # Verify tag signature
-git verify-tag v1.7.4
+git verify-tag v2.0.0
 ```
 
 ### Binary Verification
@@ -237,11 +238,11 @@ When downloading release binaries:
 If using the Docker image:
 
 ```bash
-docker pull ghcr.io/washosk/zabbix-bench:v1.7.4
+docker pull ghcr.io/washosk/zabbix-bench:v2.0.0
 
 # Verify image (check for CVEs)
 # Use Trivy or similar image scanner
-trivy image ghcr.io/washosk/zabbix-bench:v1.7.4
+trivy image ghcr.io/washosk/zabbix-bench:v2.0.0
 ```
 
 ## Safe Usage Practices

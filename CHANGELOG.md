@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-06-05
+
+### Added
+
+- **Bulk Provisioning**: The setup and cleanup phases now use Zabbix bulk API operations (`host.create` and `item.create`), reducing network calls drastically and provisioning thousands of resources in seconds.
+- **Sub-millisecond Precision**: Latency percentiles and measurements now track `time.Microseconds()`, providing rich sub-millisecond granularity (e.g. `0.41 ms`) instead of flooring to zero.
+- **Robust HTTP Client**: Added an explicit `http.Client` with strict timeouts to the API wrapper to prevent the application from hanging indefinitely if the Zabbix server stalls.
+- **Rate Limiting**: Integrated `golang.org/x/time/rate` token bucket rate limiter for smoother, highly accurate sustained `-rate` execution.
+
+### Changed
+
+- **Architectural Refactor**: The monolithic codebase has been cleanly split into modular packages (`internal/config`, `internal/benchmark`, `internal/zabbix`) for better maintainability.
+- **GC-Optimized Memory Pooling**: Workers now pre-allocate a single contiguous slice of metrics (`[]*sender.Metric`) instead of dynamically allocating structs on every batch, virtually eliminating Garbage Collection pressure at high NVPS rates.
+- **Concurrent Setup Pool**: Transformed the setup loop to use a bounded worker pool instead of unbounded goroutines for host configuration.
+
+### Fixed
+
+- **Hot-path Error Parsing**: Swapped out slow string checks for high-performance `errors.As(net.Error)` logic in the main event loop error handlers.
+- **Actions Compatibility**: Downgraded `golang.org/x/time` to support Go 1.24 correctly in GitHub Actions environments.
+
+---
+
 ## [1.7.4] - 2026-05-27
 
 ### Fixed
@@ -449,6 +471,7 @@ go install github.com/washosk/zabbix-bench@latest
 
 | Version | Release Date | Status | Notes |
 | --- | --- | --- | --- |
+| 2.0.0 | 2026-06-05 | Stable | Massive architectural refactoring, memory optimizations, and bulk API setup |
 | 1.7.4 | 2026-05-27 | Stable | Value pool safeguards and worker stats concurrency fixes |
 | 1.7.3 | 2026-05-24 | Stable | Scaled up default benchmark profile limits |
 | 1.7.2 | 2026-04-30 | Stable | Selective cleanup safety and performance improvements |

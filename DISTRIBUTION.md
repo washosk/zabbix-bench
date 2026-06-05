@@ -23,7 +23,7 @@ File: `Formula/zabbix-bench.rb`
 class ZabbixBench < Formula
   desc "High-performance Zabbix NVPS benchmark tool"
   homepage "https://github.com/washosk/zabbix-bench"
-  url "https://github.com/washosk/zabbix-bench/releases/download/v1.7.4/zabbix-bench-linux-amd64"
+  url "https://github.com/washosk/zabbix-bench/releases/download/v2.0.0/zabbix-bench-linux-amd64"
   sha256 "$(sha256sum zabbix-bench | cut -d' ' -f1)"
   license "MIT"
 
@@ -164,9 +164,9 @@ ENTRYPOINT ["zabbix-bench"]
 
 ```bash
 docker build -t washosk/zabbix-bench:latest .
-docker tag washosk/zabbix-bench:latest washosk/zabbix-bench:v1.7.4
+docker tag washosk/zabbix-bench:latest washosk/zabbix-bench:v2.0.0
 docker push washosk/zabbix-bench:latest
-docker push washosk/zabbix-bench:v1.7.4
+docker push washosk/zabbix-bench:v2.0.0
 ```
 
 ### Step 3: Create docker-compose example
@@ -207,7 +207,7 @@ Create a PPA or deb repository with:
 
 ```bash
 # Build deb package
-dpkg-deb --build zabbix-bench_1.7.4_amd64 zabbix-bench_1.7.4_amd64.deb
+dpkg-deb --build zabbix-bench_2.0.0_amd64 zabbix-bench_2.0.0_amd64.deb
 
 # Host on repository server
 # Users: apt-add-repository ppa:yourname/zabbix-bench
