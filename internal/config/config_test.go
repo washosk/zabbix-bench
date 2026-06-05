@@ -1,13 +1,10 @@
-// Package main provides tests for the zabbix-bench tool.
-package main
+package config
 
 import (
 	"testing"
 	"time"
 )
 
-// TestValidateConfig ensures that configuration validation logic correctly
-// identifies missing or invalid parameters.
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -73,8 +70,6 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
-// TestBuildRuntimePlan verifies that configuration is correctly transformed
-// into an actionable execution plan.
 func TestBuildRuntimePlan(t *testing.T) {
 	cfg := Config{
 		NumHosts: 10, NumSenders: 5, MetricsPerHost: 6, BatchHosts: 50, MaxBatchSize: 500,
@@ -94,7 +89,6 @@ func TestBuildRuntimePlan(t *testing.T) {
 		t.Errorf("expected BatchSize 50, got %d", plan.EffectiveBatchSize)
 	}
 
-	// Test metric-limited batch size
 	cfg.MaxBatchSize = 10
 	plan = BuildRuntimePlan(cfg)
 	if plan.EffectiveBatchSize != 1 {
@@ -102,15 +96,12 @@ func TestBuildRuntimePlan(t *testing.T) {
 	}
 }
 
-// TestApplyProfile checks if pre-defined profiles correctly set configuration
-// defaults without overriding explicit user input.
 func TestApplyProfile(t *testing.T) {
-	// Need to simulate flag visibility
 	explicit := map[string]bool{}
 
-	cfg := defaultConfig()
+	cfg := DefaultConfig()
 	cfg.Profile = "flood"
-	applyProfile(&cfg, explicit)
+	ApplyProfile(&cfg, explicit)
 
 	if cfg.NumHosts != 300 {
 		t.Errorf("Profile 'flood' should set hosts=300, got %d", cfg.NumHosts)
@@ -119,12 +110,11 @@ func TestApplyProfile(t *testing.T) {
 		t.Errorf("Profile 'flood' should set senders=200, got %d", cfg.NumSenders)
 	}
 
-	// CLI override should win
-	cfg = defaultConfig()
+	cfg = DefaultConfig()
 	cfg.Profile = "light"
 	cfg.NumHosts = 42
 	explicit["hosts"] = true
-	applyProfile(&cfg, explicit)
+	ApplyProfile(&cfg, explicit)
 
 	if cfg.NumHosts != 42 {
 		t.Errorf("CLI override should preserve hosts=42, got %d", cfg.NumHosts)
@@ -134,18 +124,12 @@ func TestApplyProfile(t *testing.T) {
 	}
 }
 
-// TestYAMLOverridePrecedence ensures that CLI flags take priority over YAML
-// configuration and defaults.
 func TestYAMLOverridePrecedence(t *testing.T) {
-	// This test essentially verifies the logic in main() for merging fileCfg and cfg.
-	// We can't easily test main() directly without reorganization, but we can verify the merging logic.
-
 	fileCfg := Config{NumHosts: 100}
-	cfg := Config{NumHosts: 50} // Default from flag defined value
+	cfg := Config{NumHosts: 50}
 
 	explicit := map[string]bool{"hosts": true}
 
-	// Simulation of logic:
 	if !explicit["hosts"] {
 		cfg.NumHosts = fileCfg.NumHosts
 	}
